@@ -1,0 +1,1587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESP Power Flow Dashboard</title>
+  <style>
+  *, *::before, *::after {
+  box-sizing: border-box;
+}
+    :root {
+      --bg: #121212;
+      --fg: #ffffff;
+      --panel-bg: #1e1e1e;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg);
+      color: var(--fg);
+      font-family: 'Segoe UI', sans-serif;
+    }
+    body.light {
+      --bg: #ffffff;
+      --fg: #000000;
+      --panel-bg: #f3f3f3;
+    }
+    .layout {
+      position: relative;
+      width: 90vw;
+      max-width: 400px;
+      height: 60vh;
+      margin: 20px auto;
+      background-color: var(--panel-bg);  /* ✅ thay đổi theo theme */
+      border-radius: 10px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    }
+    #layout2 {
+      position: relative;
+      width: 90vw;
+      max-width: 400px;
+      max-height: 400px;
+      overflow-y: auto;
+      padding: 12px;
+      margin: 20px auto;
+      background-color: var(--panel-bg);  /* ✅ thay đổi theo theme */
+      border-radius: 10px;
+      box-shadow: 0 0 20px rgba(0,0,0,0.5);
+       transition: all 0.3s ease;
+    }
+
+    .item {
+        position: absolute;
+        text-align: center;
+        width: 80px;         /* đảm bảo không co lại */
+        height: 80px;
+    }
+    .item svg {
+      display: block;
+      margin: 0 auto 4px;
+      width: 30px;
+      height: 30px;
+    }
+    .value, .power{
+      display: inline-block;  
+      font-family: monospace;
+      font-size: 1.1rem;
+      color: #12de15;
+      width: 80px;         /* Cố định chiều rộng để không dịch chuyển */
+      display: inline-block;
+      text-align: center;  /* Căn giữa số */
+    }
+    .gauge-ring {
+        width: 100%;
+        height: 100%;
+        border: 3px solid #00d078;     /* Màu viền gauge */
+        box-shadow: 0 0 10px #00d07866;
+        border-radius: 50%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 5px;
+        box-sizing: border-box;
+     }
+
+    /* Responsive positioning with % */
+    #solar {
+      top: 10%;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+     #battery {
+      top: 50%;
+      left: 10%;
+      transform: translateY(-50%);
+    }
+    #export {
+      top: 35%;
+      right: 10%;
+      transform: translateY(-50%);
+    }
+    #load {
+      bottom: 10%;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+    /* Mobile optimization */
+    @media screen and (max-width: 600px) {
+      .item svg {
+        width: 32px;
+        height: 32px;
+      }
+      .value {
+        font-size: 0.7rem;
+      }
+    }
+    @media screen and (min-width: 700px) {
+      .item {
+        width: 80px;
+        height: 80px;
+      }
+      .item svg {
+        width: 30px;
+        height: 30px;
+      }
+      .value {
+        font-size: 0.8rem;
+      }
+    }
+
+    .line-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 0;
+      pointer-events: none;
+      width: 100%;
+      height: 100%;
+    }
+    .unit {
+      color: #aaa;         /* Màu xám */
+      font-style: italic;  /* Tùy chọn: nghiêng */
+      font-size: 0.9em;    /* Tùy chọn: nhỏ hơn */
+    }
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 16px;
+      height: 40px;
+      background-color: var(--bg);
+      color: var(--fg);
+      border-bottom: 1px solid #444;
+      font-weight: bold;
+      font-size: 1rem;
+    }
+
+   .theme-toggle {
+      background: none;
+      border: none;
+      color: var(--fg);
+      font-size: 1.2rem;
+      cursor: pointer;
+    }
+    @keyframes dashmove {
+    to {
+        stroke-dashoffset: -10;
+      }
+    }
+    .line-animated {
+      animation: dashmove 1s linear infinite;
+    }
+    #bgCanvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      z-index: 0;               /* nằm dưới layout */
+      width: 100%;
+      height: 100%;
+      pointer-events: none;     /* không ảnh hưởng chuột */
+      opacity: 1.8;             /* mờ nhẹ */
+    }
+
+    #layoutCanvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 1.0;
+}
+
+#layoutCanvas2 {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 1.0;
+}
+
+.layout-header {
+  text-align: center;
+  font-weight: bold;
+  font-size: 1rem;
+  color: #00d078;
+  padding: 6px 12px;
+  background-color: var(--panel-bg);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+  text-shadow: 0 0 4px #00d07888;
+}
+  .details-content {
+  color: var(--fg);
+  padding: 12px;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.details-content p {
+  margin: 6px 0;
+}
+.details-content .label {
+  font-weight: bold;
+}
+
+.grid-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 16px;
+}
+.grid-2col p {
+  margin: 4px 0;
+}
+
+.layout-footer {
+  box-sizing: border-box;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 16px;
+  font-size: 0.9rem;
+  font-weight: bold;
+  color: #00d078;
+  background-color: var(--panel-bg);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
+  z-index: 1;  /* để đảm bảo nằm trên canvas hoặc line nếu cần */
+}
+
+
+.footer-item {
+  flex: 1;
+  text-align: center;
+}
+
+
+.center-layout {
+  position: absolute;
+  top: 10%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.6);
+  padding: 20px;
+  border-radius: 12px;
+  color: white;
+  width: 90%;
+  max-width: 600px;
+  z-index: 100;
+  box-shadow: 0 0 20px #000;
+}
+
+.settings-card {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.settings-card h2 {
+  text-align: center;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 0.9em;
+}
+
+.form-group input {
+  width: 50%;
+  padding: 8px;
+  border-radius: 6px;
+  border: none;
+  background: #fff;
+  color: #000;
+}
+
+button {
+  padding: 10px;
+  border-radius: 6px;
+  border: none;
+  background: #00d078;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.hidden {
+  display: none;
+}
+
+.setting-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.setting-tabs button {
+  background: #333;
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background 0.3s ease;
+}
+
+.setting-tabs button:hover {
+  background: #555;
+}
+
+.setting-section {
+  display: none;
+}
+
+.setting-section.active {
+  display: block;
+}
+
+.setting-tabs-text {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  font-size: 1rem;
+  font-weight: 500;
+  margin-bottom: 16px;
+}
+
+.setting-tab {
+  color: #888;
+  cursor: pointer;
+  position: relative;
+  padding-bottom: 4px;
+  transition: color 0.3s;
+}
+
+.setting-tab:hover {
+  color: #0f0; /* màu nổi bật khi hover */
+}
+
+.setting-tab.active {
+  color: #0f0;
+}
+
+.setting-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: #0f0;
+  border-radius: 1px;
+}
+
+.btn-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.btn-row button {
+  padding: 8px 16px;
+  font-size: 14px;
+}
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-title">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 14 14" id="settings_icon" height="18" width="18">
+      <g id="cog--work-loading-cog-gear-settings-machine">
+        <path id="Subtract" fill="url(#paint0_linear_9371_5148)" fill-rule="evenodd" d="M6.591.0000066757C6.28929.000389427 5.99383.0911818 5.74434.260876c-.2492.169501-.44175.409982-.55213.690456l-.00042.00107-.37713.948998-1.15881.6671-1.01644-.15413c-.29876-.04483-.60501.00085-.87743.13146-.27234.13058-.49922.34-.65066.60135l-.40882.70354c-.15185.26131-.22104.56237-.198246.86376.022787.30129.136398.58844.325585.82399l.641651.79948v1.32411l-.641482.79928c-.189187.23555-.302967.5229-.325754.8242-.022794.30139.046392.60244.198242.86376l.408634.7032c.15143.2614.37848.4711.65085.6017.27242.1306.57791.1764.87667.1316l1.02013-.1543 1.15559.6634.37555.9527c.11034.2808.30316.5219.55256.6915.24948.1697.54431.2605.84601.2609h.81865c.3017-.0004.59653-.0912.84601-.2609.2494-.1696.44222-.4107.55256-.6915l.37555-.9528 1.15554-.6633 1.0202.1542c.2987.0449.6042-.0009.8767-.1315.2723-.1306.4994-.3403.6508-.6017l.4086-.7032c.1519-.26133.2211-.56238.1983-.86377-.0228-.3013-.1366-.58865-.3258-.8242l-.6415-.79928v-1.3241l.6417-.79949c.1892-.23555.3028-.52269.3256-.82399.0228-.30139-.0464-.60245-.1983-.86376l-.4088-.70354c-.1514-.26135-.3783-.47077-.6506-.60135-.2725-.13061-.5787-.17629-.8775-.13146l-1.0164.15413-1.15883-.66709-.37713-.949004-.00042-.001071C8.69304.670851 8.50049.430371 8.25129.260869 8.0018.0911751 7.70634.000382751 7.40463 0l-.40681.0000068843-.40682-2.086e-7ZM5.28484 5.2868c.41242-.41242 1.00266-.61297 1.71297-.61297.71032 0 1.30056.20055 1.71297.61297.41242.41241.61297 1.00265.61297 1.71297 0 .71031-.20055 1.30055-.61297 1.71297-.41241.41241-1.00265.61296-1.71297.61296-.71031 0-1.30055-.20055-1.71297-.61296-.41241-.41242-.61296-1.00266-.61296-1.71297 0-.71032.20055-1.30056.61296-1.71297Z" clip-rule="evenodd"></path>
+      </g>
+      <defs>
+        <linearGradient id="paint0_linear_9371_5148" x1="2.624" x2="13.473" y1="2.692" y2="8.272" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#ffd600"></stop>
+          <stop offset="1" stop-color="#00d078"></stop>
+        </linearGradient>
+      </defs>
+    </svg>
+     ESP Dashboard</div>
+    <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
+  </div>
+
+<canvas id="bgCanvas"></canvas>
+
+  <div class="layout" id="layout">
+  <canvas id="layoutCanvas"></canvas>
+  <div class="layout-header" style="color: #00d078;">Main Monitor</div>
+    <!-- Solar -->
+    <div class="item" id="solar">
+    <div class="gauge-ring">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512" width="14" height="14" >
+        <path id = "solaricon" fill="#de1717" d="M294.2 1.2c5.1 2.1 8.7 6.7 9.6 12.1l14.1 84.7 84.7 14.1c5.4 .9 10 4.5 12.1 9.6s1.5 10.9-1.6 15.4l-38.5 55c-2.2-.1-4.4-.2-6.7-.2c-23.3 0-45.1 6.2-64 17.1l0-1.1c0-53-43-96-96-96s-96 43-96 96s43 96 96 96c8.1 0 15.9-1 23.4-2.9c-36.6 18.1-63.3 53.1-69.8 94.9l-24.4 17c-4.5 3.2-10.3 3.8-15.4 1.6s-8.7-6.7-9.6-12.1L98.1 317.9 13.4 303.8c-5.4-.9-10-4.5-12.1-9.6s-1.5-10.9 1.6-15.4L52.5 208 2.9 137.2c-3.2-4.5-3.8-10.3-1.6-15.4s6.7-8.7 12.1-9.6L98.1 98.1l14.1-84.7c.9-5.4 4.5-10 9.6-12.1s10.9-1.5 15.4 1.6L208 52.5 278.8 2.9c4.5-3.2 10.3-3.8 15.4-1.6zM144 208a64 64 0 1 1 128 0 64 64 0 1 1 -128 0zM639.9 431.9c0 44.2-35.8 80-80 80l-271.9 0c-53 0-96-43-96-96c0-47.6 34.6-87 80-94.6l0-1.3c0-53 43-96 96-96c34.9 0 65.4 18.6 82.2 46.4c13-9.1 28.8-14.4 45.8-14.4c44.2 0 80 35.8 80 80c0 5.9-.6 11.7-1.9 17.2c37.4 6.7 65.8 39.4 65.8 78.7z"/>
+       </svg>
+      <div class="value" id="solar_value">--W</div>
+      </div>
+    </div>
+
+    <!-- Battery -->
+    <div class="item" id="battery">
+    <div class="gauge-ring" id="battery_arc">
+    <div class="value" id="battery_value">--%</div>
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 14 14" id="Car-Battery-Charging--Streamline-Core-Gradient" height="14" width="14">
+      <g id="Free Gradient/Map Travel/car-battery-charging">
+         <path id="Union" fill="url(#paint0_linear_14402_9853)" fill-rule="evenodd" d="M1.5 2c0-.27614.22386-.5.5-.5h3c.27614 0 .5.22386.5.5v1.5h3V2c0-.27614.22386-.5.5-.5h3c.2761 0 .5.22386.5.5v1.5c.8284 0 1.5.67157 1.5 1.5v7.5c0 .8284-.6716 1.5-1.5 1.5h-11C.671573 14 0 13.3284 0 12.5V5c0-.82843.671573-1.5 1.5-1.5V2Zm6.36761 3.49458c.27916.20303.34088.59391.13785.87307l-1.2781 1.75739H8.5c.23508 0 .45028.13191.55695.34139.10667.20948.08678.46111-.05149.65122l-2 2.75005c-.20302.2791-.59391.3408-.87306.1378-.27916-.203-.34088-.5939-.13786-.8731l1.27811-1.75736H5.5c-.23508 0-.45027-.1319-.55694-.34138-.10668-.20949-.08678-.46111.05148-.65122l2-2.75c.20303-.27916.59391-.34088.87307-.13786Z" clip-rule="evenodd"></path>
+      </g>
+      <defs>
+      <linearGradient id="paint0_linear_14402_9853" x1=".538" x2="15.572" y1="2.51" y2="12.001" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#00d078"></stop>
+          <stop offset="1" stop-color="#880000"></stop>
+        </linearGradient>
+      </defs>
+      </svg>
+      <div class="value" id="battery_power">--W</div>
+      </div>
+    </div>
+  
+
+    <!-- Export -->
+    <div class="item" id="export">
+    <div class="gauge-ring">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512" width="14" height="14" >
+        <path fill="#FFD43B" d="M0 256L28.5 28c2-16 15.6-28 31.8-28H228.9c15 0 27.1 12.1 27.1 27.1c0 3.2-.6 6.5-1.7 9.5L208 160H347.3c20.2 0 36.7 16.4 36.7 36.7c0 7.4-2.2 14.6-6.4 20.7l-192.2 281c-5.9 8.6-15.6 13.7-25.9 13.7h-2.9c-15.7 0-28.5-12.8-28.5-28.5c0-2.3 .3-4.6 .9-6.9L176 288H32c-17.7 0-32-14.3-32-32z"/>
+      </svg>
+      <div class="value" id="grid_power">--w</div>
+      </div>
+    </div>
+
+    <!-- Load -->
+    <div class="item" id="load">
+    <div class="gauge-ring">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512" width="14" height="14" >
+        <path fill="url(#loadcolor)" d="M575.8 255.5c0 18-15 32.1-32 32.1l-32 0 .7 160.2c.2 35.5-28.5 64.3-64 64.3l-122.1 0L288 448l80.8-67.3c7.8-6.5 7.6-18.6-.4-24.9L250.6 263.2c-14.6-11.5-33.8 7-22.8 22L288 368l-85.5 71.2c-6.1 5-7.5 13.8-3.5 20.5L230.4 512l-102.3 0c-35.3 0-64-28.7-64-64l0-160.4-32 0c-18 0-32-14-32-32.1c0-9 3-17 10-24L266.4 8c7-7 15-8 22-8s15 2 21 7L416 100.7 416 64c0-17.7 14.3-32 32-32l32 0c17.7 0 32 14.3 32 32l0 121 52.8 46.4c8 7 12 15 11 24z"/>
+      <defs>
+      <linearGradient id="loadcolor" x1=".538" x2="15.572" y1="2.51" y2="12.001" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#00d078"></stop>
+          <stop offset="1" stop-color="#007df0  "></stop>
+        </linearGradient>
+      </defs>
+      </svg>
+      <div class="value" id="load_value">--W</div>
+      </div>
+    </div>
+      <div class="layout-footer">
+        <div class="footer-item" id="diff_power">Bù Lưới: -- W</div>
+        <div class="footer-item" id="total_energy">Sản Lượng: -- kWh</div>
+     </div>
+  </div>
+
+
+<g id="power_lines"> 
+  <svg class="line-layer" width="100%" height="100%" style="position:absolute; top:0; left:0; z-index:0; pointer-events:none;">
+      <defs>
+  <!-- Gradient đỏ cho battery -->
+  <linearGradient id="gradBattery" x1="0%" y1="0%" x2="100%" y2="0%">
+    <stop offset="0%" stop-color="#ff4d8b"/>      <!-- hồng đậm -->
+    <stop offset="50%" stop-color="#ff0000"/>     <!-- đỏ -->
+    <stop offset="100%" stop-color="#880000"/>    <!-- đỏ tối -->
+  </linearGradient>
+
+  <!-- Gradient xanh cho solar -->
+  <linearGradient id="gradSolar" x1="0%" y1="0%" x2="100%" y2="0%">
+    <stop offset="0%" stop-color="#00d078"/>
+    <stop offset="100%" stop-color="#007df0"/>
+  </linearGradient>
+
+  <!-- Gradient vàng cho Grid -->
+  <linearGradient id="gridToLoadGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+    <stop offset="0%" stop-color="#ff8c00" />   <!-- Cam -->
+    <stop offset="50%" stop-color="#ffd700" />    <!-- Vàng đậm -->
+    <stop offset="100%" stop-color="#fff7b2" />     <!-- Vàng nhạt -->
+  </linearGradient>
+
+  <linearGradient id="greenGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+    <stop offset="0%" stop-color="#b9fbc0" />   <!-- Xanh lá nhạt -->
+    <stop offset="100%" stop-color="#014421" /> <!-- Xanh lá đậm -->
+  </linearGradient>
+
+          <marker id="arrowhead" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L6,3 Z" fill="red" />
+      </marker>
+      </defs>
+      <!-- Solar -> Load -->
+      <path id="line_solar_to_load" stroke="#00d078" stroke-width="2" fill="none" visibility="hidden"/>
+      <circle id="dot_solar_to_load" r="3" fill="#00d078" visibility="hidden">
+        <animateMotion repeatCount="indefinite" dur="2s" />
+      </circle>
+
+      <!-- Solar -> Battery -->
+      <path id="line_solar_to_battery" stroke="url(#gradSolar)" stroke-width="1.5" fill="none" visibility="hidden" />
+      <circle id="dot_solar_to_battery" r="3" fill="#00ffcc" visibility="hidden">
+        <animateMotion repeatCount="indefinite" dur="3s" />
+      </circle>
+
+      <!-- Battery -> Load -->
+      <path id="line_battery_to_load" stroke="url(#gradBattery)" stroke-width="1.5" fill="none" visibility="hidden" />
+      <circle id="dot_battery_to_load" r="3" fill="red" visibility="hidden">
+          <animateMotion repeatCount="indefinite" dur="2.5s" />
+      </circle>
+
+      <!-- Grid -> Load -->
+      <path id="line_grid_to_load" stroke="url(#gridToLoadGradient)" stroke-width="1.5" fill="none" visibility="hidden" />
+      <circle id="dot_grid_to_load" r="3" fill="#ffaa00" visibility="hidden">
+        <animateMotion repeatCount="indefinite" dur="2.5s" />
+      </circle>
+  </svg>
+</g> 
+
+<div class="layout" id="layout2">
+  <canvas id="layoutCanvas2"></canvas>
+  <div class="layout-header">Thông số mở rộng</div>
+  <div id="details_panel" class="details-content">
+    <p class="label" style="color: cyan;">ℹ️ Thiết bị</p>
+      <div class="grid-2col">
+      <p>Version: 0.1.2 </span></p>
+      <p>SSID: Be Na</span></p>
+      <p>Local IP: 192.168.1.150</span></p>
+      <p>Public IP: 8.8.8.8</span></p>
+  </div>
+</div>
+</div>
+
+<div id="settings_layout" class="center-layout hidden">
+  
+    <!-- ✨ Thanh menu chữ giống ảnh bạn gửi -->
+    <div class="setting-tabs-text">
+      <span class="setting-tab active" onclick="showSettingTab('system', this)">System</span>
+      <span class="setting-tab" onclick="showSettingTab('network', this)">Network</span>
+      <span class="setting-tab" onclick="showSettingTab('function', this)">Function</span>
+      <span class="setting-tab" onclick="showSettingTab('about', this)">About</span>
+    </div>
+    <!-- 🟢 Khối STATUS -->
+    <div id="setting_system" class="setting-section active">
+        <div class="form-row">
+          <label for="set_timeconnect">⏳Delay kết nối WiFi:</label>
+          <input type="number" id="set_timeconnect" placeholder="" min="10" max="180" style="width: 100px;">
+          <span class="unit">giây</span>
+        </div><br>
+        
+      <div class="form-row">
+        <label for="set_timeupload">📤Delay gửi dữ liệu:</label>
+        <input type="number" id="set_timeupload" placeholder="" min="1" max="60" style="width: 90px;">
+        <span class="unit">giây</span>
+      </div><br>
+
+      <div class="form-row">
+          <label for="set_timeupdatedns">⏳Delay cập nhật IP DNS:</label>
+          <input type="number" id="set_timeupdatedns" placeholder="" min="10" max="180" style="width: 100px;">
+          <span class="unit">Phút</span>
+        </div><br>
+
+      <div class="form-row">
+        <label for="set_startdate">📅 Ngày bắt đầu chu kỳ:</label>
+        <input type="number" id="set_startdate" placeholder="" min="1" max="30" style="width: 90px;">
+        <span class="unit">ngày</span>
+      </div><br>
+
+      <div class="form-row">
+        <label for="set_h_on_h">⏰ Giờ mở (HH:MM):</label>
+        <input type="number" id="set_hour_on" placeholder="" min="0" max="23" style="width: 50px;">
+        <span class="unit">giờ</span>
+        <input type="number" id="set_min_on" placeholder="" min="0" max="59" style="width: 50px;">
+        <span class="unit">phút</span>
+      </div><br>
+
+      <div class="form-row">
+        <label for="set_h_off_h">⏰ Giờ tắt (HH:MM):</label>
+        <input type="number" id="set_hour_off" placeholder="" min="0" max="23" style="width: 50px;">
+        <span class="unit">giờ</span>
+        <input type="number" id="set_min_off" placeholder="" min="0" max="59" style="width: 50px;">
+        <span class="unit">phút</span>
+      </div><br>
+      
+      <div class="form-row">
+        <label for="set_ledpin">LED pin:</label>
+        <input type="number" id="set_ledpin" placeholder="" min="1" max="30" style="width: 80px;">
+        <span class="unit">GPIO</span>
+      </div><br>
+      
+      <div class="form-row">
+        <label for="set_pzem17">PZEM17 pin:</label>
+        <input type="number" id="set_pzem17_tx" placeholder="" min="1" max="30" style="width: 80px;">
+        <input type="number" id="set_pzem17_rx" placeholder="" min="1" max="30" style="width: 80px;">
+      </div><br>
+      
+      <div class="form-row">
+        <label for="set_pzem04A">PMC220 pin:</label>
+        <input type="number" id="set_pzemA_tx" placeholder="" min="1" max="30" style="width: 80px;">
+        <input type="number" id="set_pzemA_rx" placeholder="" min="1" max="30" style="width: 80px;">
+      </div><br>
+      
+      <div class="form-row">
+        <label for="set_pzem04B">Pzem04 pin:</label>
+        <input type="number" id="set_pzemB_tx" placeholder="" min="1" max="30" style="width: 80px;">
+        <input type="number" id="set_pzemB_rx" placeholder="" min="1" max="30" style="width: 80px;">
+      </div><br>
+
+      <div class="form-group">
+        <div class="btn-row">
+          <button onclick="saveSettings()">💾 Lưu</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 🟡 Khối NETWORK: giao diện hiện tại -->
+    <div id="setting_network" class="setting-section hidden">
+      <div class="form-group">
+        <button onclick="scanWifi()">🔍 Quét WiFi</button><br>
+        <div id="wifi_list" style="margin-top: 5px;"></div><br>
+        <label for="ssid">SSID:
+        <input type="text" id="set_ssid" placeholder="Nhập tên WiFi hoặc chọn bên dưới"/>
+      </div>
+      <div class="form-group">
+        <label for="set_pass">Mật Khẩu:  
+        <input type="text" id="set_pass" placeholder="cam131092"/>
+      </div>
+      <div class="form-group">
+        <label for="set_ip">IP Tĩnh: 
+        <input type="text" id="set_ip" placeholder="192.168.1.150" /> 
+      </div>
+      <div class="form-group">
+        <label for="set_domain">Tên Miền:     
+          <input type="text" id="set_domain" placeholder="tntn1111.duckdns.org" />
+      </div>
+      <div class="form-group">
+        <label for="set_token">Token:
+        <input type="text" id="set_token" placeholder="6b62769a-092e-4d2d-9c19-1d3698f2ac96" />
+      </div>
+      <div class="form-group">
+        <div class="btn-row">
+          <button onclick="saveSettings()">💾 Lưu</button>
+          <button id="connect_btn" onclick="connectToWifi()" style="display: none;">📡 Kết nối WiFi</button>
+        </div>
+      </div>
+    </div>
+    <!-- 🟣 Khối FUNCTION -->
+    <div id="setting_function" class="setting-section hidden">
+      <p>⚙️ Function: Firmware/Website Update</p>
+      <!-- Bạn có thể thêm các công tắc hoặc điều khiển ở đây -->
+      <div style="margin:10px 0; padding:8px; border:1px dashed #333; border-radius:8px;">
+      <h4>1) Upload giao diện web trên SPIFFS</h4>
+      <p style="margin:6px 0;">Chọn file (index.html, app.js, styles.css, ...). Bấm UPLOAD để hoàn thành.</p>
+      <input type="file" id="file_web" accept=".html,.htm,.js,.css,.json,.svg,.png,.jpg" />
+      <button onclick="uploadWebFile()">Upload Website</button>
+      <div id="upload_web_status" style="margin-top:6px;color:#0f0;"></div>
+    </div>
+
+    <div style="margin:10px 0; padding:8px; border:1px dashed #333; border-radius:8px;">
+      <h4>2) Upload firmware (.bin)</h4>
+      <p style="margin:6px 0;">Chọn file (.bin) và UPLOAD để cập nhật firmware.</p>
+      <input type="file" id="file_fw" accept=".bin" />
+      <button onclick="uploadFirmware()">Upload firmware</button>
+      <div id="upload_fw_status" style="margin-top:6px;color:#0f0;"></div>
+    </div>
+
+      <div style="margin-top:15px; text-align:center;">
+        <button onclick="resetBoard()" 
+          style="background:#222;color:#f66;border:1px solid #f66;padding:6px 12px;border-radius:6px;">
+          🔁 Reset board ESP32
+        </button>
+      </div>
+
+    <div style="margin-top:12px;">
+      <button onclick="showMainLayout()" style="background:transparent;color:#0f0;border:1px solid #0f0;padding:6px 12px;border-radius:6px;">Hoàn tất / Quay lại</button>
+    </div>
+    </div>
+    <!-- 🔵 Khối ABOUT -->
+    <div id="setting_about" class="setting-section hidden">
+      <p>📦 ESP Dashboard v1.0</p>
+      <p>Tác giả: <strong>Bạn</strong></p>
+    </div>
+    <div style="text-align: right; margin: 10px 5px;">
+      <button onclick="showMainLayout()" style="
+        background-color: transparent;
+        color: #0f0;
+        border: none;
+        font-size: 1rem;
+        cursor: pointer;
+        text-decoration: underline;
+      ">← Quay lại</button>
+    </div>
+</div>
+
+<script type="module">
+
+  import { initializeApp }
+  from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
+
+  import {
+    getDatabase,
+    ref,
+    onValue
+  } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCbChRlH8YPXtjbnm5m3IfatfpEuwDaQJU",
+    authDomain: "websolar-ebfe8.firebaseapp.com",
+    databaseURL: "https://websolar-ebfe8-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "websolar-ebfe8",
+    storageBucket: "websolar-ebfe8.firebasestorage.app",
+    messagingSenderId: "791385553459",
+    appId: "1:791385553459:web:88bc25b9f3dc5967cfc146",
+    measurementId: "G-VQQ68ZPW0D"
+  };
+
+  const firebaseApp = initializeApp(firebaseConfig);
+  const firebaseDb = getDatabase(firebaseApp);
+
+  let socket;
+  
+  window.addEventListener("load", () => {
+    initFirebase();
+
+    // WebSocket chỉ hoạt động khi mở trang trực tiếp từ ESP32.
+    if (
+      window.location.hostname !== "localhost" &&
+      window.location.hostname !== "127.0.0.1" &&
+      !window.location.hostname.endsWith("github.io")
+    ) {
+      initWebSocket();
+    }
+  });
+
+  function initFirebase() {
+    const dataRef = ref(firebaseDb, "/");
+
+    onValue(
+      dataRef,
+      (snapshot) => {
+        const data = snapshot.val();
+
+        if (!data) {
+          console.warn("⚠️ Firebase chưa có dữ liệu");
+          return;
+        }
+
+        console.log("🔥 Firebase data:", data);
+        updateMainDisplay(data);
+      },
+      (error) => {
+        console.error("❌ Lỗi đọc Firebase:", error);
+      }
+    );
+  }
+
+  function initWebSocket() {
+    socket = new WebSocket(`ws://${window.location.host}/ws`);
+
+    socket.onopen = () => {
+      console.log("✅ WebSocket connected");
+      // Bạn có thể hiển thị trạng thái kết nối ở đây (nếu muốn)
+      socket.send(JSON.stringify({ type: "get_system_config" }));
+    };
+
+    socket.onclose = () => {
+      console.warn("⚠️ WebSocket closed. Thử kết nối lại sau 2s...");
+      setTimeout(initWebSocket, 2000); // Thử lại sau 2 giây
+    };
+
+    socket.onerror = (e) => {
+      console.error("❌ WebSocket error:", e);
+      socket.close(); // Đảm bảo gọi close để onclose được kích hoạt
+    };
+
+    socket.onmessage = (event) => {
+      console.log("📨 WebSocket message Setting:", event.data);
+      // Xử lý phản hồi từ ESP32 nếu cần
+        try {
+          const data = JSON.parse(event.data);
+          if (data.ssids) {
+            handleScanResult(data.ssids);
+          }
+
+          if (data.type === "system_config") {
+              if (data.mode) {
+                const connectBtn = document.getElementById("connect_btn");
+                connectBtn.style.display = "inline-block"; // Hiện nút khi đang là Access Point
+              } else {
+                const connectBtn = document.getElementById("connect_btn");
+                connectBtn.style.display = "none"; // Ẩn nếu không phải
+              }
+
+            if (data.timeconnect) {
+              document.getElementById("set_timeconnect").placeholder = `(Saved: ${data.timeconnect})`;
+            }
+            if (data.timeupload) {
+              document.getElementById("set_timeupload").placeholder = `(Saved: ${data.timeupload})`;
+            }
+            if (data.startdate) {
+              document.getElementById("set_startdate").placeholder = `(Saved: ${data.startdate})`;
+            }
+            if (data.timeupdatedns) {
+              document.getElementById("set_timeupdatedns").placeholder = `(Saved: ${data.timeupdatedns})`;
+            }
+
+            if (data.h_on) {
+              const h = Math.floor(data.h_on / 10);
+              const m = data.h_on % 10 * 10;
+              document.getElementById("set_hour_on").placeholder = `(${h}H)`;
+              document.getElementById("set_min_on").placeholder = `(${m.toString().padStart(2, '0')})`;
+            }
+
+            if (data.h_off) {
+              const h = Math.floor(data.h_off / 10);
+              const m = data.h_off % 10 * 10;
+              document.getElementById("set_hour_off").placeholder = `(${h}H)`;
+              document.getElementById("set_min_off").placeholder = `(${m.toString().padStart(2, '0')})`;
+            }
+            
+            if (data.ledpin) {
+              document.getElementById("set_ledpin").placeholder = `(GPIO ${data.ledpin})`;
+            }
+            else{
+              document.getElementById("set_ledpin").placeholder = `(GPIO ${data.ledpin})`;
+            }
+
+            if (data.tx17) {
+              document.getElementById("set_pzem17_tx").placeholder = `(TX:${data.tx17})`;
+            }
+
+            if (data.rx17) {
+              document.getElementById("set_pzem17_rx").placeholder = `(RX:${data.rx17})`;
+            }
+
+            if (data.atx) {
+              document.getElementById("set_pzemA_tx").placeholder = `(TX:${data.atx})`;
+            }
+
+            if (data.arx) {
+              document.getElementById("set_pzemA_rx").placeholder = `(RX:${data.arx})`;
+            }
+
+            if (data.btx) {
+              document.getElementById("set_pzemB_tx").placeholder = `(TX:${data.btx})`;
+            }
+
+            if (data.brx) {
+              document.getElementById("set_pzemB_rx").placeholder = `(RX:${data.brx})`;
+            }
+          }
+        } catch (e) {
+          console.warn("Không phải JSON hợp lệ.");
+        }
+    };
+  }
+
+  function getThisTab() {
+    const activeSection = document.querySelector(".setting-section.active");
+    if (activeSection) {
+      return activeSection.id.replace("setting_", ""); // Trả về "system", "network", ...
+    }
+    return null;
+  }
+
+  function resetBoard(){
+    if(!confirm("Bạn có chắc muốn khởi động lại ESP32 không?")) return;
+    fetch('/reset')
+      .then(resp => {
+        if(resp.ok){
+          alert("ESP32 đang khởi động lại...");
+          setTimeout(()=>location.reload(), 6000); // reload sau vài giây
+        } else {
+          alert("Không gửi được lệnh reset!");
+        }
+      })
+      //.catch(()=>alert("Lỗi kết nối khi gửi lệnh reset!"));
+  }
+  function resetupdate(){
+    if(!confirm(" Khởi động lại ESP32 để hoàn tất quá trình cập nhật FW ")) return;
+    fetch('/reset')
+      .then(resp => {
+        if(resp.ok){
+          alert("ESP32 đang khởi động lại...");
+          setTimeout(()=>location.reload(), 6000); // reload sau vài giây
+        } else {
+          alert("Không gửi được lệnh reset!");
+        }
+      })
+      //.catch(()=>alert("Lỗi kết nối khi gửi lệnh reset!"));
+  }
+  function showSettingTab(tabName, element) {
+    // Ẩn tất cả layout
+    
+    const sections = document.querySelectorAll(".setting-section");
+    sections.forEach(section => section.classList.remove("active"));
+
+    const target = document.getElementById(`setting_${tabName}`);
+    if (target) target.classList.add("active");
+
+    // Bỏ class active trên các tab text
+    const allTabs = document.querySelectorAll(".setting-tab");
+    allTabs.forEach(tab => tab.classList.remove("active"));
+
+    // Gắn class active cho tab đang nhấn
+    if (element) element.classList.add("active");
+  }
+
+  function scanWifi() {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      alert("❌ WebSocket chưa sẵn sàng!");
+      return;
+    }
+    socket.send(JSON.stringify({ action: "scan_wifi" }));
+    document.getElementById("wifi_list").innerHTML = "🔄 Đang quét WiFi...";
+  }
+
+// Xử lý dữ liệu trả về từ ESP
+  function handleScanResult(ssids) {
+    const wifiList = document.getElementById("wifi_list");
+    wifiList.innerHTML = ""; // Xóa cũ
+    ssids.forEach(ssid => {
+      const btn = document.createElement("button");
+      btn.textContent = ssid;
+      btn.className = "ssid-item";
+      btn.onclick = () => {
+        document.getElementById("set_ssid").value = ssid;
+      };
+      wifiList.appendChild(btn);
+    });
+  }
+  
+  function saveSettings() {
+    const thistab = getThisTab();
+    let config = {
+      type: "save_config",
+      data: {}
+    };
+    //Phần network
+    if(thistab === "network"){
+      const ssid = document.getElementById("set_ssid").value;
+      const pass = document.getElementById("set_pass").value;
+      const ip = document.getElementById("set_ip").value;
+      const token = document.getElementById("set_token").value;
+      const domain = document.getElementById("set_domain").value;
+
+      config.data = { ssid, pass, token, domain, ip };
+    }
+    // Phần system
+    if(thistab === "system"){
+      const timeconnect = document.getElementById("set_timeconnect").value.trim();
+      const timeupload = document.getElementById("set_timeupload").value.trim();
+      const timeupdatedns = document.getElementById("set_timeupdatedns").value.trim();
+      const startdate = document.getElementById("set_startdate").value.trim();
+      const hour_on = document.getElementById("set_hour_on").value.trim();
+      const min_on = document.getElementById("set_min_on").value.trim();
+      const hour_off = document.getElementById("set_hour_off").value.trim();
+      const min_off = document.getElementById("set_min_off").value.trim();
+      const led = document.getElementById("set_ledpin").value.trim();
+      const pzem17tx = document.getElementById("set_pzem17_tx").value.trim();
+      const pzem17rx = document.getElementById("set_pzem17_rx").value.trim();
+      const atx = document.getElementById("set_pzemA_tx").value.trim();
+      const arx = document.getElementById("set_pzemA_rx").value.trim();
+      const btx = document.getElementById("set_pzemB_tx").value.trim();
+      const brx = document.getElementById("set_pzemB_rx").value.trim();
+      // 🧠 Chuyển sang dạng 5:30 → 53, 18:00 → 180
+      let hon = "";
+      let hoff = "";
+      if(hour_on !== "")
+      {hon = hour_on * 10 + Math.floor(min_on / 10);}
+      if(hour_off !== "")
+      {hoff = hour_off * 10 + Math.floor(min_off / 10);}
+      
+      config.data = { timeconnect, timeupload, timeupdatedns, startdate, hon, hoff, led, pzem17tx, pzem17rx, atx, arx, brx, btx };
+    }
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify(config));
+      console.log("📤 Đã gửi:", config);
+      alert("✅ Đã gửi cấu hình về ESP");
+      // 🔽 Xoá giá trị các input có ID bắt đầu bằng 'set_' trong tab hiện tại
+      clearInputs(thistab);
+
+
+    } else {
+      alert("❌ WebSocket chưa sẵn sàng!");
+      console.warn("WebSocket state:", socket ? socket.readyState : "socket undefined");
+    }
+  }
+
+  function clearInputs(tab) {
+    const inputs = document.querySelectorAll(`#setting_${tab} input`);
+    inputs.forEach(input => {
+      input.value = "";
+    });
+  }
+
+  // Upload web file (SPIFFS)
+  function uploadWebFile(){
+    const inp = document.getElementById('file_web');
+    const status = document.getElementById('upload_web_status');
+    if(!inp.files.length){ alert('Chọn file web để upload.'); return; }
+    const file = inp.files[0];
+    const form = new FormData();
+    // form field name will be ignored by Async handler; filename is important
+    form.append('file', file, file.name);
+
+    status.textContent = '🔄 Đang upload...';
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/upload_file', true);
+
+    xhr.upload.onprogress = function(e){
+      if(e.lengthComputable){
+        status.textContent = `🔄 Upload: ${Math.round(e.loaded / e.total * 100)}%`;
+      }
+    };
+    xhr.onload = function(){
+      if(xhr.status === 200){
+        status.style.color = '#0f0';
+        status.textContent = '✅ Upload file web thành công. Nhấn F5 để reload giao diện.';
+      } else {
+        status.style.color = '#f55';
+        status.textContent = '❌ Upload file web thất bại.';
+      }
+    };
+    xhr.onerror = function(){
+      status.style.color = '#f55';
+      status.textContent = '❌ Lỗi kết nối khi upload file web.';
+    };
+    xhr.send(form);
+  }
+
+  // Upload firmware (.bin)
+  function uploadFirmware(){
+    const inp = document.getElementById('file_fw');
+    const status = document.getElementById('upload_fw_status');
+    if(!inp.files.length){ alert('Chọn file .bin firmware.'); return; }
+    const file = inp.files[0];
+    const form = new FormData();
+    form.append('file', file, file.name);
+
+    status.textContent = '🔄 Đang upload firmware...';
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/update_fw', true);
+
+    xhr.upload.onprogress = function(e){
+      if(e.lengthComputable){
+        status.textContent = `🔄 Upload FW: ${Math.round(e.loaded / e.total * 100)}%`;
+      }
+      else
+      {
+        status.textContent = `🔄 Upload FW: OK`;
+      }
+    };
+    xhr.onload = function(){
+      if(xhr.status === 200 && xhr.responseText.trim() === "OK"){
+        status.style.color = '#0f0';
+        status.textContent = '✅ Cập nhật Firmware thành công. Vui lòng reset lại bo ESP.';
+        resetupdate();
+      } else {
+        status.style.color = '#f55';
+        status.textContent = '❌ Firmware upload failed.';
+      }
+    };
+    xhr.onerror = function(){
+      status.style.color = '#f55';
+      status.textContent = '❌ Lỗi kết nối khi upload firmware.';
+    };
+    xhr.send(form);
+  }
+
+  
+  function connectToWifi() {
+    const ssid = document.getElementById("set_ssid").value;
+    const pass = document.getElementById("set_pass").value;
+
+    if (!ssid) {
+      alert("❌ SSID không được để trống!");
+      return;
+    }
+
+    // Gửi yêu cầu kết nối đến ESP
+    const config = {
+      type: "connect_wifi",
+      data: { ssid, pass }
+    };
+
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify(config));
+      console.log("📤 Gửi yêu cầu kết nối WiFi:", config);
+      alert("🚀 Đang cố gắng kết nối WiFi...");
+      // 🔽 Xoá giá trị các input có ID bắt đầu bằng 'set_' trong tab hiện tại
+      clearInputs(thistab);
+
+    } else {
+      alert("❌ WebSocket chưa sẵn sàng!");
+    }
+  }
+
+  document.getElementById("settings_icon").addEventListener("click", () => {
+    document.getElementById("layout").style.display = "none";
+    document.getElementById("layout2").style.display = "none";
+    document.getElementById("settings_layout").classList.remove("hidden");
+    document.getElementById("power_lines").style.display = "none"; // Ẩn line
+  });
+
+  function showMainLayout() {
+    document.getElementById("settings_layout").classList.add("hidden");
+    document.getElementById("layout").style.display = "block";
+    document.getElementById("layout2").style.display = "block";
+    document.getElementById("power_lines").style.display = "inline"; // Hiện lại line
+  }
+  
+  // Khôi phục theme khi tải trang
+  window.addEventListener("DOMContentLoaded", () => {
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme === "light") {
+    document.body.classList.add("light");
+    document.querySelector(".theme-toggle").textContent = "☀️";
+    } else {
+        document.body.classList.remove("light");
+        document.querySelector(".theme-toggle").textContent = "🌙";
+    }
+    
+  });
+
+    
+// Gắn sự kiện click vào khối battery
+        document.getElementById("battery").addEventListener("click", () => {
+        showBatteryDetails();
+        });
+        document.getElementById("solar").addEventListener("click", () => {
+          showSolarDetails();
+        });
+        document.getElementById("export").addEventListener("click", () => {
+          showGridDetails();
+        });
+        document.getElementById("load").addEventListener("click", () => {
+          showLoadDetails();
+        });
+
+    function toggleTheme() {
+      const isLight = document.body.classList.toggle("light");
+      const theme = isLight ? "light" : "dark";
+      localStorage.setItem("theme", theme);
+
+      /////////////////////// Đổi icon theo trạng thái///////////////////////////////////////
+      document.querySelector(".theme-toggle").textContent = isLight ? "☀️" : "🌙";
+    }
+// //////////////////////hiện thông tin khi load trang /////////////////////////////////
+
+
+    function toggleLine(id, condition) {
+      const line = document.getElementById("line_" + id);
+      const dot = document.getElementById("dot_" + id);
+      const vis = condition ? "visible" : "hidden";
+      if (line) line.setAttribute("visibility", vis);
+      if (dot) dot.setAttribute("visibility", vis);
+    }
+
+    function updateLine(lineId, fromId, toId) {
+      const fromEl = document.getElementById(fromId);
+      const toEl = document.getElementById(toId);
+      const layoutEl = document.getElementById("layout");
+      if (!fromEl || !toEl || !layoutEl) return;
+
+      const from = fromEl.getBoundingClientRect();
+      const to = toEl.getBoundingClientRect();
+      const layout = layoutEl.getBoundingClientRect();
+
+      const scrollX = window.scrollX || document.documentElement.scrollLeft;
+      const scrollY = window.scrollY || document.documentElement.scrollTop;
+      
+      const fx = from.left + from.width / 2 + scrollX;
+      const fy = from.top + from.height / 2 + scrollY;
+      const tx = to.left + to.width / 2 + scrollX;
+      const ty = to.top + to.height / 2 + scrollY;
+      
+      const dx = tx - fx;
+      const dy = ty - fy;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      const radius = Math.max(20, from.width / 2);
+
+      const unitX = dx / len;
+      const unitY = dy / len;
+
+      let fx2 = fx + unitX * radius;
+      let fy2 = fy + unitY * radius;
+      let tx2 = tx - unitX * radius;
+      let ty2 = ty - unitY * radius;
+      
+      //const radius = Math.max(20, from.width / 2);
+      const centerX = layout.left + layout.width / 2 + scrollX; //tọa độ X giửa trang                     
+      const centerY = layout.top + layout.height / 2 + scrollY; // tọa độ Y giuwae trang                  
+
+      //const inCenterx = (Math.abs(fx - centerX) < 1) ? 0:1;// nếu nó ở giứa thò 0                                                                                             
+      const fromIsLeft = (fx < centerX) ? 1: -1; //Nếu khối bắt đầu ở bên trái, thì fromIsLeft == 1, 
+      const toIsLeft = (tx < centerX) ? -1: 1; //Nếu khối kết thúc ở bên phải thì toIsLeft == 1,
+      const fromIsAbove = (fy < centerY) ? -4:0; //Nếu fromIsAbove == true, thì khối bắt đầu ở trên
+      //const toIsBelow = (ty > centerY) ? -1:1; //Nếu toIsBelow == true, thì khối kết thúc ở dưới
+      const arcRadius = 15;
+      let path = "";
+
+      // === Bo cong chuẩn bằng ARC ===
+      if (lineId === "battery_to_load" || lineId === "grid_to_load") {
+        const ring = (fx < centerX) ? 1: 0; //1: cong theo chiều kim đồng hồ
+        const startX = fx + (fromIsLeft * radius);
+        const startY = fy;
+        const midX = fromIsLeft > 0 ? centerX - 8: centerX + 8;
+        const x1 = fromIsLeft > 0 ? midX - arcRadius:midX + arcRadius ;
+        const y1 = startY;
+        const arcToX = midX;
+        const arcToY = fy + arcRadius;
+        const endX = midX;
+        const endY = ty2 - (7 + fromIsAbove);
+        path = `M ${startX},${startY}
+                L ${x1},${y1}
+                A ${arcRadius} ${arcRadius} 0 0 ${ring} ${arcToX} ${arcToY}
+                L ${endX},${endY}`;
+      }
+      
+      else if (lineId === "solar_to_battery") {
+        const startX = centerX + (toIsLeft * 8);
+        const startY = fy + radius - 2;
+        const midY = ty - arcRadius; // trước khi bo xuống battery
+        const arcToX = startX - arcRadius; // sang trái một chút
+        const arcToY = ty;
+        const endX = tx + radius;
+        const endY = ty;
+
+        path = `M ${startX},${startY}
+                L ${startX},${midY}
+                A ${arcRadius} ${arcRadius} 0 0 1 ${arcToX},${arcToY}
+                L ${endX},${endY}`;
+
+      }
+
+
+      else if (lineId === "solar_to_load") {
+        path = `M ${fx2},${fy2} L ${tx2},${ty2}`;
+      }
+
+      else {
+        const cx1 = fx2 + (tx2 - fx2) / 2;
+        const cy1 = fy2;
+        const cx2 = fx2 + (tx2 - fx2) / 2;
+        const cy2 = ty2;
+        path = `M ${fx2},${fy2} C ${cx1},${cy1} ${cx2},${cy2} ${tx2},${ty2}`;
+      }
+
+      const line = document.getElementById("line_" + lineId);
+      const dot = document.getElementById("dot_" + lineId);
+
+      if (line) line.setAttribute("d", path.replace(/\s+/g, ' ').trim());
+      if (dot) {
+        const anim = dot.querySelector("animateMotion");
+        if (anim) anim.setAttribute("path", path);
+      }
+    }
+
+    function formatWatt(watt) {
+      if (Math.abs(watt) >= 1000) {
+      return (watt / 1000).toFixed(2) + "kW";
+      } else {
+        return watt.toFixed(1) + "W";
+        }
+    }
+    ///////////////////////////////////////////////////////////////////////////
+  function showBatteryDetails() {
+  const panel = document.getElementById("details_panel");
+  if (!panel) return;
+
+  // Tạo khối HTML để hiển thị chi tiết Battery
+  panel.innerHTML = `
+  <p class="label" style="color: green;">🔋 Battery Details</p>
+  <div class="grid-2col">
+    <p>Điện áp: <span id="bms_volt">--V</span></p>
+    <p>Dòng Điện: <span id="bms_current">--A</span></p>
+    <p>Temp 1: <span id="bms_temp1">--°C</span></p>
+    <p>Temp 2: <span id="bms_temp2">--°C</span></p>
+    <p>Sạc: <span id="bms_charging">--</span></p>
+    <p>Xả: <span id="bms_discharging">--</span></p>
+    <p>Cân bằng: <span id="bms_balancing">--</span></p>
+    <p>DL còn: <span id="bms_remain">--Ah</span></p>
+    <p>Tổng DL: <span id="bms_total">--mAh</span></p>
+    <p>Danh định: <span id="bms_nominal">--Ah</span></p>
+    <p>Cycle: <span id="bms_cycle">--Ah</span></p>
+    <p>Dòng cân bằng: <span id="bms_balance_curr">--mA</span></p>
+    <p>Cell Min: <span id="bms_cell_min">--V</span></p>
+    <p>Cell Max: <span id="bms_cell_max">--V</span></p>
+    <p>Δ: <span id="bms_cell_diff">--V</span></p>
+    <p>Trung bình: <span id="bms_cell_avg">--V</span></p>
+  </div>
+`;
+
+}
+    
+   function showSolarDetails() {
+  const panel = document.getElementById("details_panel");
+  if (!panel) return;
+
+  panel.innerHTML = `
+    <p class="label" style="color: green;">🔆 Solar Details</p>
+    <div class="grid-2col">
+      <p>Volt: <span id="solar_volt">--V</span></p>
+      <p>Current: <span id="solar_cur">--A</span></p>
+      <p>Power: <span id="solar_power">--W</span></p>
+      <p>Energy: <span id="solar_energy">--Wh</span></p>
+      <p>Power .Max: <span id="solar_max">--Wh</span></p>
+    </div>
+  `;
+}
+
+    function showGridDetails() {
+      const panel = document.getElementById("details_panel");
+      if (!panel) return;
+
+      panel.innerHTML = `
+        <p class="label" style="color: green;">⚡ Grid Details</p>
+        <div class="grid-2col">
+          <p>Volt: <span id="grid_volt">--V</span></p>
+          <p>Current: <span id="grid_current">--A</span></p>
+          <p>Power: <span id="grid_power_detail">--W</span></p>
+          <p>Energy: <span id="grid_energy">--kWh</span></p>
+        </div>
+      `;
+    }
+
+    function showLoadDetails() {
+  const panel = document.getElementById("details_panel");
+  if (!panel) return;
+
+  panel.innerHTML = `
+    <p class="label" style="color: green;">💡 Load Details</p>
+    <div class="grid-2col">
+      <p>Volt: <span id="load_volt">--V</span></p>
+      <p>Current: <span id="load_current">--A</span></p>
+      <p>Power: <span id="load_power">--W</span></p>
+      <p>Energy: <span id="load_energy">--kWh</span></p>
+      
+    </div>
+  `;
+}
+  
+  function updateMainDisplay(data){
+        
+        //const data = JSON.parse(event.data);
+        document.getElementById('solar_value').textContent = formatWatt(data.solar_power);
+        document.getElementById('grid_power').textContent = formatWatt(data.grid_power);
+        document.getElementById('load_value').textContent = formatWatt(data.load_power);
+        document.getElementById('battery_power').textContent = formatWatt(data.bat_power);
+        document.getElementById('battery_value').textContent = data.bms?.soc + "%";
+        document.getElementById("total_energy").textContent = "Sản Lượng: " + (data.total_energy || 0) + " kWh";
+        document.getElementById("diff_power").textContent = "Bù Lưới: " + (data.diff_power || 0) + " W";
+
+        //đổi màu gauge battery thôi % pin
+        const soc = data.bms?.soc || 0;
+        const batteryRing = document.getElementById("battery_arc");
+        const batteryValue = document.getElementById("battery_value");
+
+        if (batteryRing) {
+          if (soc > 50) {
+            batteryRing.style.borderColor = "#00ff66";
+            batteryValue.style.color = "#00ff66";
+          } else if (soc > 20) {
+            batteryRing.style.borderColor = "#ffcc00";
+            batteryValue.style.color = "#ffcc00";
+          } else {
+            batteryRing.style.borderColor = "#ff4444";
+            batteryValue.style.color = "#ff4444";
+          }
+      }
+
+        if (document.getElementById("solar_volt")) {
+          document.getElementById("solar_volt").textContent = data.solar_volt + " V";
+          document.getElementById("solar_cur").textContent = data.solar_current + " A";
+          document.getElementById("solar_power").textContent = formatWatt(data.solar_power);
+          document.getElementById("solar_energy").textContent = data.pzem?.energy + " kWh";
+          document.getElementById("solar_max").textContent = formatWatt(data.solar_max);
+        }
+
+        if (document.getElementById("grid_volt")) {
+          document.getElementById("grid_volt").textContent = data.grid_volt + " V";
+          document.getElementById("grid_current").textContent = data.grid_current + " A";
+          document.getElementById("grid_power_detail").textContent = formatWatt(data.grid_power);
+          document.getElementById("grid_energy").textContent = data.grid_energy + " kWh"; // hoặc data.grid_energy nếu có riêng
+        }
+
+        if (document.getElementById("load_volt")) {
+          document.getElementById("load_volt").textContent = data.load_volt + " V";
+          document.getElementById("load_current").textContent = data.load_current + " A";
+          document.getElementById("load_power").textContent = formatWatt(data.load_power);
+          document.getElementById("load_energy").textContent = data.load_energy + " kWh";
+        }
+
+        if (document.getElementById("bms_volt")) {
+          document.getElementById("bms_volt").textContent = data.bat_volt + " V";
+          document.getElementById("bms_current").textContent = data.bat_current + " A";
+          document.getElementById("bms_temp1").textContent = data.bms?.temperature1 + "°C";
+          document.getElementById("bms_temp2").textContent = data.bms?.temperature2 + "°C";
+          document.getElementById("bms_charging").textContent = data.bms?.charging ? "ON" : "OFF";
+          document.getElementById("bms_discharging").textContent = data.bms?.discharging ? "ON" :"OFF";
+          document.getElementById("bms_balancing").textContent = data.bms?.balancing ? "ON" : "OFF";
+          document.getElementById("bms_total").textContent = data.bms?.totalCapacity + " mAh";
+          document.getElementById("bms_remain").textContent = data.bms?.remainCapacity + " Ah";
+          document.getElementById("bms_nominal").textContent = data.bms?.nominalCapacity + " Ah";
+          document.getElementById("bms_cycle").textContent = data.bms?.totalCycleCapacity + " Ah";
+          document.getElementById("bms_balance_curr").textContent = data.bms?.balanceCurrent + " mA";
+          document.getElementById("bms_cell_min").textContent = data.bms?.minCellVoltage + " V";
+          document.getElementById("bms_cell_max").textContent = data.bms?.maxCellVoltage + " V";
+          document.getElementById("bms_cell_diff").textContent = data.bms?.cellDiff + " V";
+          document.getElementById("bms_cell_avg").textContent = data.bms?.avgCellVoltage + " V";
+        }
+
+        updateLine("solar_to_load", "solar", "load");
+        updateLine("solar_to_battery", "solar", "battery");
+        updateLine("battery_to_load", "battery", "load");
+        updateLine("grid_to_load", "export", "load");
+
+
+        // Đường năng lượng: bật/tắt theo điều kiện
+        toggleLine("solar_to_load", data.solar_power > 0);
+        toggleLine("solar_to_battery", data.bat_power > 0);
+        toggleLine("battery_to_load", data.bat_power < 0);
+        toggleLine("grid_to_load", data.grid_power > 0);
+  }
+      
+    window.addEventListener("resize", () => {
+      updateLine("solar_to_load", "solar", "load");
+      updateLine("solar_to_battery", "solar", "battery");
+      updateLine("battery_to_load", "battery", "load");
+      updateLine("grid_to_load", "export", "load");
+    });
+    window.addEventListener("scroll", () => {
+      updateLine("solar_to_load", "solar", "load");
+      updateLine("solar_to_battery", "solar", "battery");
+      updateLine("battery_to_load", "battery", "load");
+      updateLine("grid_to_load", "export", "load");
+    });
+
+    const canvas = document.getElementById('bgCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    // Khởi tạo hạt
+    let particles = Array.from({length: 60}, () => ({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      r: Math.random() * 2 + 1,                // bán kính
+      dx: (Math.random() - 0.5) * 0.5,         // vận tốc X
+      dy: (Math.random() - 0.5) * 0.5,         // vận tốc Y
+    }));
+
+    function drawParticles() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#00ffcc44';   // màu xanh ngọc nhạt
+      for (let p of particles) {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fill();
+
+        p.x += p.dx;
+        p.y += p.dy;
+
+        // cho hạt quay lại khi chạm mép
+        if (p.x < 0 || p.x > canvas.width) p.dx *= -1;
+        if (p.y < 0 || p.y > canvas.height) p.dy *= -1;
+      }
+      requestAnimationFrame(drawParticles);
+    }
+    drawParticles();
+    ///////////////////////////////////////////////////////////////////////////////
+    const layout = document.getElementById("layout");
+    const layoutCanvas = document.getElementById("layoutCanvas");
+    const lctx = layoutCanvas.getContext("2d");
+
+    function resizeLayoutCanvas() {
+      layoutCanvas.width = layout.offsetWidth;
+      layoutCanvas.height = layout.offsetHeight;
+    }
+    resizeLayoutCanvas();
+    window.addEventListener('resize', resizeLayoutCanvas);
+
+    let layoutParticles = Array.from({length: 40}, () => ({
+      x: Math.random() * layoutCanvas.width,
+      y: Math.random() * layoutCanvas.height,
+      r: Math.random() * 1.5 + 1,
+      dx: (Math.random() - 0.5) * 0.4,
+      dy: (Math.random() - 0.5) * 0.4,
+    }));
+
+    function drawLayoutParticles() {
+      lctx.clearRect(0, 0, layoutCanvas.width, layoutCanvas.height);
+      lctx.fillStyle = "#00ffcc44";
+      for (let p of layoutParticles) {
+        lctx.beginPath();
+        lctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        lctx.fill();
+
+        p.x += p.dx;
+        p.y += p.dy;
+
+        if (p.x < 0 || p.x > layoutCanvas.width) p.dx *= -1;
+        if (p.y < 0 || p.y > layoutCanvas.height) p.dy *= -1;
+      }
+      requestAnimationFrame(drawLayoutParticles);
+    }
+    drawLayoutParticles();
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    const layout2 = document.getElementById("layout2");
+    const layoutCanvas2 = document.getElementById("layoutCanvas2");
+    const ctx2 = layoutCanvas2.getContext("2d");
+
+    function resizeLayoutCanvas2() {
+      layoutCanvas2.width = layout2.offsetWidth;
+      layoutCanvas2.height = layout2.offsetHeight;
+    }
+    resizeLayoutCanvas2();
+    window.addEventListener("resize", resizeLayoutCanvas2);
+
+    let particles2 = Array.from({length: 40}, () => ({
+      x: Math.random() * layoutCanvas2.width,
+      y: Math.random() * layoutCanvas2.height,
+      r: Math.random() * 1.5 + 1,
+      dx: (Math.random() - 0.5) * 0.4,
+      dy: (Math.random() - 0.5) * 0.4,
+    }));
+
+    function drawParticles2() {
+      ctx2.clearRect(0, 0, layoutCanvas2.width, layoutCanvas2.height);
+      ctx2.fillStyle = "#00ffcc44";
+      for (let p of particles2) {
+        ctx2.beginPath();
+        ctx2.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx2.fill();
+
+        p.x += p.dx;
+        p.y += p.dy;
+
+        if (p.x < 0 || p.x > layoutCanvas2.width) p.dx *= -1;
+        if (p.y < 0 || p.y > layoutCanvas2.height) p.dy *= -1;
+      }
+      requestAnimationFrame(drawParticles2);
+    }
+    drawParticles2();
+
+    // Khi trang tải, hiển thị mặc định tab Status
+    window.addEventListener("load", () => {
+      const defaultTab = document.querySelector('.setting-tab.active');
+      if (defaultTab) {
+        defaultTab.click();
+      }
+    });
+</script>
+</body>
+</html>
+
+
