@@ -638,7 +638,7 @@ button {
     </div>
 
     <!-- 🟡 Khối NETWORK: giao diện hiện tại -->
-    <div id="setting_network" class="setting-section hidden">
+    <div id="setting_network" class="setting-section">
       <div class="form-group">
         <button onclick="scanWifi()">🔍 Quét WiFi</button><br>
         <div id="wifi_list" style="margin-top: 5px;"></div><br>
@@ -1605,7 +1605,7 @@ button {
 
       if(cfg.led !== undefined)
           document.getElementById("set_ledpin").placeholder =
-              `(GPIO ${cfg.ledpin})`;
+              `(GPIO ${cfg.led})`;
       
       if(cfg.pzem17tx !== undefined)
           document.getElementById("set_pzem17_tx").placeholder =
@@ -1630,6 +1630,32 @@ button {
       if(cfg.brx !== undefined)
           document.getElementById("set_pzemB_rx").placeholder =
               `(RX: ${cfg.brx})`;
+
+      if(cfg.h_on !== undefined){
+
+          const h = Math.floor(cfg.h_on / 10);
+
+          const m = (cfg.h_on % 10) * 10;
+
+          document.getElementById("set_hour_on").placeholder = h;
+
+          document.getElementById("set_min_on").placeholder =
+              m.toString().padStart(2,'0');
+
+      }
+
+      if(cfg.h_off !== undefined){
+
+          const h = Math.floor(cfg.h_off / 10);
+
+          const m = (cfg.h_off % 10) * 10;
+
+          document.getElementById("set_hour_off").placeholder = h;
+
+          document.getElementById("set_min_off").placeholder =
+              m.toString().padStart(2,'0');
+
+      }
 
   }
 </script>
