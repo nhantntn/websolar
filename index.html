@@ -1603,9 +1603,33 @@ button {
           document.getElementById("set_startdate").placeholder =
               `(Saved: ${cfg.startdate})`;
 
-      if(cfg.ledpin !== undefined)
+      if(cfg.led !== undefined)
           document.getElementById("set_ledpin").placeholder =
               `(GPIO ${cfg.ledpin})`;
+      
+      if(cfg.pzem17tx !== undefined)
+          document.getElementById("set_pzem17_tx").placeholder =
+              `(TX: ${cfg.pzem17tx})`;
+
+      if(cfg.pzem17rx !== undefined)
+          document.getElementById("set_pzem17_rx").placeholder =
+              `(RX: ${cfg.pzem17rx})`;
+
+      if(cfg.atx !== undefined)
+          document.getElementById("set_pzemA_tx").placeholder =
+              `(TX: ${cfg.atx})`;
+
+      if(cfg.arx !== undefined)
+          document.getElementById("set_pzemA_rx").placeholder =
+              `(RX: ${cfg.arx})`;
+
+      if(cfg.btx !== undefined)
+          document.getElementById("set_pzemB_tx").placeholder =
+              `(TX: ${cfg.btx})`;
+
+      if(cfg.brx !== undefined)
+          document.getElementById("set_pzemB_rx").placeholder =
+              `(RX: ${cfg.brx})`;
 
   }
 </script>
