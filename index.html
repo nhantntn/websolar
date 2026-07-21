@@ -724,7 +724,8 @@ button {
   import {
     getDatabase,
     ref,
-    onValue
+    onValue,
+    update
   } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
 
   const firebaseConfig = {
@@ -740,7 +741,8 @@ button {
 
   const firebaseApp = initializeApp(firebaseConfig);
   const firebaseDb = getDatabase(firebaseApp);
-
+  const DEVICE_ID =
+    new URLSearchParams(window.location.search).get("device") || "esp001";
   let socket;
   
   window.addEventListener("load", () => {
@@ -757,7 +759,6 @@ button {
   });
 
   function initFirebase() {
-    const DEVICE_ID = "esp001";
     const dataRef = ref(firebaseDb, DEVICE_ID + "/data");
 
     onValue(dataRef, (snapshot) => {
@@ -780,6 +781,23 @@ button {
 
     });
     
+    const settingRef = ref(firebaseDb, DEVICE_ID + "/setting");
+
+    onValue(settingRef, snapshot => {
+      const setting = snapshot.val();
+
+      if (!setting) return;
+
+      console.log("Trạng thái setting:", setting);
+
+      if (setting.status === "done") {
+        console.log("ESP đã lưu cấu hình:", setting.message);
+      }
+
+      if (setting.status === "error") {
+        console.error("ESP báo lỗi:", setting.message);
+      }
+    });
   }
 
   function initWebSocket() {
@@ -958,32 +976,42 @@ button {
     });
   }
   
-  function saveSettings() {
+  async function saveSettings() {
     const thistab = getThisTab();
-    let config = {
-      type: "save_config",
-      data: {}
-    };
-    //Phần network
-    if(thistab === "network"){
-      const ssid = document.getElementById("set_ssid").value;
-      const pass = document.getElementById("set_pass").value;
-      const ip = document.getElementById("set_ip").value;
-      const token = document.getElementById("set_token").value;
-      const domain = document.getElementById("set_domain").value;
 
-      config.data = { ssid, pass, token, domain, ip };
+    let settingData = {
+      apply: true,
+      restart: false,
+      status: "pending",
+      message: "Đang chờ ESP xử lý"
+    };
+
+    if (thistab === "network") {
+      const ssid = document.getElementById("set_ssid").value.trim();
+      const pass = document.getElementById("set_pass").value;
+      const ip = document.getElementById("set_ip").value.trim();
+      const token = document.getElementById("set_token").value.trim();
+      const domain = document.getElementById("set_domain").value.trim();
+
+      if (ssid !== "") settingData.ssid = ssid;
+      if (pass !== "") settingData.pass = pass;
+      if (ip !== "") settingData.ip = ip;
+      if (token !== "") settingData.token = token;
+      if (domain !== "") settingData.domain = domain;
     }
-    // Phần system
-    if(thistab === "system"){
+
+    if (thistab === "system") {
       const timeconnect = document.getElementById("set_timeconnect").value.trim();
       const timeupload = document.getElementById("set_timeupload").value.trim();
       const timeupdatedns = document.getElementById("set_timeupdatedns").value.trim();
       const startdate = document.getElementById("set_startdate").value.trim();
-      const hour_on = document.getElementById("set_hour_on").value.trim();
-      const min_on = document.getElementById("set_min_on").value.trim();
-      const hour_off = document.getElementById("set_hour_off").value.trim();
-      const min_off = document.getElementById("set_min_off").value.trim();
+
+      const hourOn = document.getElementById("set_hour_on").value.trim();
+      const minOn = document.getElementById("set_min_on").value.trim();
+
+      const hourOff = document.getElementById("set_hour_off").value.trim();
+      const minOff = document.getElementById("set_min_off").value.trim();
+
       const led = document.getElementById("set_ledpin").value.trim();
       const pzem17tx = document.getElementById("set_pzem17_tx").value.trim();
       const pzem17rx = document.getElementById("set_pzem17_rx").value.trim();
@@ -991,27 +1019,53 @@ button {
       const arx = document.getElementById("set_pzemA_rx").value.trim();
       const btx = document.getElementById("set_pzemB_tx").value.trim();
       const brx = document.getElementById("set_pzemB_rx").value.trim();
-      // 🧠 Chuyển sang dạng 5:30 → 53, 18:00 → 180
-      let hon = "";
-      let hoff = "";
-      if(hour_on !== "")
-      {hon = hour_on * 10 + Math.floor(min_on / 10);}
-      if(hour_off !== "")
-      {hoff = hour_off * 10 + Math.floor(min_off / 10);}
-      
-      config.data = { timeconnect, timeupload, timeupdatedns, startdate, hon, hoff, led, pzem17tx, pzem17rx, atx, arx, brx, btx };
+
+      if (timeconnect !== "") settingData.timeconnect = Number(timeconnect);
+      if (timeupload !== "") settingData.timeupload = Number(timeupload);
+      if (timeupdatedns !== "") settingData.timeupdatedns = Number(timeupdatedns);
+      if (startdate !== "") settingData.startdate = Number(startdate);
+
+      if (hourOn !== "") {
+        const minute = minOn === "" ? 0 : Number(minOn);
+        settingData.hon = Number(hourOn) * 10 + Math.floor(minute / 10);
+      }
+
+      if (hourOff !== "") {
+        const minute = minOff === "" ? 0 : Number(minOff);
+        settingData.hoff = Number(hourOff) * 10 + Math.floor(minute / 10);
+      }
+
+      if (led !== "") settingData.led = Number(led);
+      if (pzem17tx !== "") settingData.pzem17tx = Number(pzem17tx);
+      if (pzem17rx !== "") settingData.pzem17rx = Number(pzem17rx);
+      if (atx !== "") settingData.atx = Number(atx);
+      if (arx !== "") settingData.arx = Number(arx);
+      if (btx !== "") settingData.btx = Number(btx);
+      if (brx !== "") settingData.brx = Number(brx);
     }
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify(config));
-      console.log("📤 Đã gửi:", config);
-      alert("✅ Đã gửi cấu hình về ESP");
-      // 🔽 Xoá giá trị các input có ID bắt đầu bằng 'set_' trong tab hiện tại
+
+    const changedFields = Object.keys(settingData).filter(key =>
+      !["apply", "restart", "status", "message"].includes(key)
+    );
+
+    if (changedFields.length === 0) {
+      alert("Bạn chưa nhập giá trị nào để lưu.");
+      return;
+    }
+
+    try {
+      const settingRef = ref(firebaseDb, `${DEVICE_ID}/setting`);
+
+      await update(settingRef, settingData);
+
+      console.log("Đã gửi setting lên Firebase:", settingData);
+
+      alert("Đã gửi cấu hình. Đang chờ ESP xử lý...");
+
       clearInputs(thistab);
-
-
-    } else {
-      alert("❌ WebSocket chưa sẵn sàng!");
-      console.warn("WebSocket state:", socket ? socket.readyState : "socket undefined");
+    } catch (error) {
+      console.error("Lỗi ghi Firebase:", error);
+      alert("Không ghi được cấu hình lên Firebase.");
     }
   }
 
@@ -1639,10 +1693,10 @@ button {
               const m = (value % 10) * 10;
 
               document.getElementById("set_hour_on").placeholder =
-                  `(Saved: ${h})`;
+                  `(${h})`;
 
               document.getElementById("set_min_on").placeholder =
-                  `(Saved: ${String(m).padStart(2, "0")})`;
+                  `(${String(m).padStart(2, "0")})`;
           }
       }
 
@@ -1654,10 +1708,10 @@ button {
               const m = (value % 10) * 10;
 
               document.getElementById("set_hour_off").placeholder =
-                  `(Saved: ${h})`;
+                  `(${h})`;
 
               document.getElementById("set_min_off").placeholder =
-                  `(Saved: ${String(m).padStart(2, "0")})`;
+                  `(${String(m).padStart(2, "0")})`;
           }
       }
 
