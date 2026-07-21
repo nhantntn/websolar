@@ -412,7 +412,12 @@ button {
         </linearGradient>
       </defs>
     </svg>
-     ESP Dashboard</div>
+    ESP Dashboard</div>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <span id="device_status"
+            style="font-size:0.8rem; color:#aaa;">
+        ⚪ Đang kiểm tra
+      </span>
     <button class="theme-toggle" onclick="toggleTheme()">🌙</button>
   </div>
 
@@ -565,6 +570,9 @@ button {
       <span class="setting-tab" onclick="showSettingTab('about', this)">About</span>
     </div>
     <!-- 🟢 Khối STATUS -->
+     <div id="setting_save_status"
+        style="text-align:center; margin-bottom:12px; font-size:0.9rem;">
+    </div>
     <div id="setting_system" class="setting-section active">
         <div class="form-row">
           <label for="set_timeconnect">⏳Delay kết nối WiFi:</label>
@@ -632,6 +640,9 @@ button {
 
       <div class="form-group">
         <div class="btn-row">
+          <div id="setting_save_status"
+              style="margin-bottom:10px; font-size:0.9rem; color:#aaa;">
+          </div>
           <button onclick="saveSettings()">💾 Lưu</button>
         </div>
       </div>
@@ -741,6 +752,8 @@ button {
 
   const firebaseApp = initializeApp(firebaseConfig);
   const firebaseDb = getDatabase(firebaseApp);
+  let lastDeviceSeen = 0;
+  let offlineTimer = null;
   const DEVICE_ID =
     new URLSearchParams(window.location.search).get("device") || "esp001";
   let socket;
@@ -781,22 +794,61 @@ button {
 
     });
     
-    const settingRef = ref(firebaseDb, DEVICE_ID + "/setting");
+    const settingRef = ref(firebaseDb, `${DEVICE_ID}/setting`);
 
     onValue(settingRef, snapshot => {
       const setting = snapshot.val();
-
       if (!setting) return;
 
       console.log("Trạng thái setting:", setting);
 
+      const statusElement =
+        document.getElementById("setting_save_status");
+
+      if (!statusElement) return;
+
+      if (setting.apply === true || setting.status === "pending") {
+        statusElement.textContent =
+          "⏳ ESP chưa xử lý, vui lòng chờ...";
+
+        statusElement.style.color = "#ffd43b";
+        return;
+      }
+
       if (setting.status === "done") {
-        console.log("ESP đã lưu cấu hình:", setting.message);
+        statusElement.textContent =
+          `✅ ${setting.message || "Đã lưu cấu hình"}`;
+
+        statusElement.style.color = "#00d078";
+
+        setTimeout(() => {
+          statusElement.textContent = "";
+        }, 5000);
+
+        return;
       }
 
       if (setting.status === "error") {
-        console.error("ESP báo lỗi:", setting.message);
+        statusElement.textContent =
+          `❌ ${setting.message || "ESP không lưu được cấu hình"}`;
+
+        statusElement.style.color = "#ff5555";
       }
+    });
+
+    const statusRef = ref(firebaseDb, `${DEVICE_ID}/status`);
+
+    onValue(statusRef, snapshot => {
+      const status = snapshot.val();
+
+      if (!status) {
+        setDeviceOffline();
+        return;
+      }
+
+      lastDeviceSeen = Number(status.last_seen || 0);
+
+      updateDeviceStatus(status);
     });
   }
 
@@ -1053,19 +1105,34 @@ button {
       return;
     }
 
+    const statusElement = document.getElementById("setting_save_status");
+
+    if (statusElement) {
+      statusElement.textContent = "⏳ Đang gửi cấu hình lên Firebase...";
+      statusElement.style.color = "#ffd43b";
+    }
+
     try {
       const settingRef = ref(firebaseDb, `${DEVICE_ID}/setting`);
 
       await update(settingRef, settingData);
-
+      
+      if (statusElement) {
+        statusElement.textContent = "⏳ Đã gửi, đang chờ ESP xử lý...";
+        statusElement.style.color = "#ffd43b";
+      }
       console.log("Đã gửi setting lên Firebase:", settingData);
 
       alert("Đã gửi cấu hình. Đang chờ ESP xử lý...");
 
       clearInputs(thistab);
     } catch (error) {
+      if (statusElement) {
+        statusElement.textContent = "❌ Không gửi được cấu hình lên Firebase";
+        statusElement.style.color = "#ff5555";
+      }
       console.error("Lỗi ghi Firebase:", error);
-      alert("Không ghi được cấu hình lên Firebase.");
+      
     }
   }
 
@@ -1716,6 +1783,47 @@ button {
       }
 
   }
+
+  function updateDeviceStatus(status) {
+    const el = document.getElementById("device_status");
+    if (!el) return;
+
+    const lastSeen = Number(status.last_seen || 0);
+    const age = Date.now() - lastSeen;
+
+    if (lastSeen > 0 && age <= 30000) {
+      const rssi = status.rssi !== undefined
+        ? ` | ${status.rssi} dBm`
+        : "";
+
+      el.textContent = `🟢 Online${rssi}`;
+      el.style.color = "#00d078";
+    } else {
+      setDeviceOffline();
+    }
+  }
+
+  function setDeviceOffline() {
+    const el = document.getElementById("device_status");
+    if (!el) return;
+
+    el.textContent = "🔴 Offline";
+    el.style.color = "#ff5555";
+  }
+
+  offlineTimer = setInterval(() => {
+    if (!lastDeviceSeen) {
+      setDeviceOffline();
+      return;
+    }
+
+    const age = Date.now() - lastDeviceSeen;
+
+    if (age > 30000) {
+      setDeviceOffline();
+    }
+  }, 5000);
+
   window.showSettingTab = showSettingTab;
   window.saveSettings = saveSettings;
   window.scanWifi = scanWifi;
