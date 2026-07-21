@@ -951,7 +951,7 @@ button {
     // Gắn class active cho tab đang nhấn
     if (element) element.classList.add("active");
   }
-  window.showSettingTab = showSettingTab;
+
   function scanWifi() {
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       alert("❌ WebSocket chưa sẵn sàng!");
@@ -1716,6 +1716,15 @@ button {
       }
 
   }
+  window.showSettingTab = showSettingTab;
+  window.saveSettings = saveSettings;
+  window.scanWifi = scanWifi;
+  window.connectToWifi = connectToWifi;
+  window.uploadWebFile = uploadWebFile;
+  window.uploadFirmware = uploadFirmware;
+  window.resetBoard = resetBoard;
+  window.showMainLayout = showMainLayout;
+  window.toggleTheme = toggleTheme;
 </script>
 </body>
 </html>
