@@ -758,26 +758,28 @@ button {
 
   function initFirebase() {
     const DEVICE_ID = "esp001";
+    const dataRef = ref(firebaseDb, DEVICE_ID + "/data");
 
-    const dataRef = ref(firebaseDb, DEVICE_ID);
-
-    onValue(
-      dataRef,
-      (snapshot) => {
+    onValue(dataRef, (snapshot) => {
         const data = snapshot.val();
 
-        if (!data) {
-          console.warn("⚠️ Firebase chưa có dữ liệu");
-          return;
-        }
+        if (!data) return;
 
-        console.log("🔥 Firebase data:", data);
         updateMainDisplay(data);
-      },
-      (error) => {
-        console.error("❌ Lỗi đọc Firebase:", error);
-      }
-    );
+    });
+
+    const configRef = ref(firebaseDb, DEVICE_ID + "/config");
+
+    onValue(configRef, (snapshot) => {
+
+        const cfg = snapshot.val();
+
+        if(!cfg) return;
+
+        updateSettingFromFirebase(cfg);
+
+    });
+    
   }
 
   function initWebSocket() {
@@ -941,7 +943,7 @@ button {
     document.getElementById("wifi_list").innerHTML = "🔄 Đang quét WiFi...";
   }
 
-// Xử lý dữ liệu trả về từ ESP
+  // Xử lý dữ liệu trả về từ ESP
   function handleScanResult(ssids) {
     const wifiList = document.getElementById("wifi_list");
     wifiList.innerHTML = ""; // Xóa cũ
@@ -1150,7 +1152,7 @@ button {
   });
 
     
-// Gắn sự kiện click vào khối battery
+ // Gắn sự kiện click vào khối battery
         document.getElementById("battery").addEventListener("click", () => {
         showBatteryDetails();
         });
@@ -1172,7 +1174,7 @@ button {
       /////////////////////// Đổi icon theo trạng thái///////////////////////////////////////
       document.querySelector(".theme-toggle").textContent = isLight ? "☀️" : "🌙";
     }
-// //////////////////////hiện thông tin khi load trang /////////////////////////////////
+ // //////////////////////hiện thông tin khi load trang /////////////////////////////////
 
 
     function toggleLine(id, condition) {
@@ -1316,9 +1318,9 @@ button {
     <p>Δ: <span id="bms_cell_diff">--V</span></p>
     <p>Trung bình: <span id="bms_cell_avg">--V</span></p>
   </div>
-`;
+ `;
 
-}
+ }
     
    function showSolarDetails() {
   const panel = document.getElementById("details_panel");
@@ -1334,7 +1336,7 @@ button {
       <p>Power .Max: <span id="solar_max">--Wh</span></p>
     </div>
   `;
-}
+ }
 
     function showGridDetails() {
       const panel = document.getElementById("details_panel");
@@ -1365,7 +1367,7 @@ button {
       
     </div>
   `;
-}
+ }
   
   function updateMainDisplay(data){
         
@@ -1582,6 +1584,30 @@ button {
         defaultTab.click();
       }
     });
+
+  function updateSettingFromFirebase(cfg){
+
+      if(cfg.timeconnect !== undefined)
+          document.getElementById("set_timeconnect").placeholder =
+              `(Saved: ${cfg.timeconnect})`;
+
+      if(cfg.timeupload !== undefined)
+          document.getElementById("set_timeupload").placeholder =
+              `(Saved: ${cfg.timeupload})`;
+
+      if(cfg.timeupdatedns !== undefined)
+          document.getElementById("set_timeupdatedns").placeholder =
+              `(Saved: ${cfg.timeupdatedns})`;
+
+      if(cfg.startdate !== undefined)
+          document.getElementById("set_startdate").placeholder =
+              `(Saved: ${cfg.startdate})`;
+
+      if(cfg.ledpin !== undefined)
+          document.getElementById("set_ledpin").placeholder =
+              `(GPIO ${cfg.ledpin})`;
+
+  }
 </script>
 </body>
 </html>
