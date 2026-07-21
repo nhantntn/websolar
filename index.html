@@ -638,7 +638,7 @@ button {
     </div>
 
     <!-- 🟡 Khối NETWORK: giao diện hiện tại -->
-    <div id="setting_network" class="setting-section">
+    <div id="setting_network" class="setting-section hidden">
       <div class="form-group">
         <button onclick="scanWifi()">🔍 Quét WiFi</button><br>
         <div id="wifi_list" style="margin-top: 5px;"></div><br>
@@ -933,7 +933,7 @@ button {
     // Gắn class active cho tab đang nhấn
     if (element) element.classList.add("active");
   }
-
+  window.showSettingTab = showSettingTab;
   function scanWifi() {
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       alert("❌ WebSocket chưa sẵn sàng!");
@@ -1633,9 +1633,9 @@ button {
 
       if(cfg.hon !== undefined){
 
-          const h = Math.floor(cfg.h_on / 10);
+          const h = Math.floor(cfg.hon / 10);
 
-          const m = (cfg.h_on % 10) * 10;
+          const m = (cfg.hon % 10) * 10;
 
           document.getElementById("set_hour_on").placeholder = `(${h}H)`;
           document.getElementById("set_min_on").placeholder = `(${m.toString().padStart(2, '0')})`;
@@ -1644,9 +1644,9 @@ button {
 
       if(cfg.hoff !== undefined){
 
-          const h = Math.floor(cfg.h_off / 10);
+          const h = Math.floor(cfg.hoff / 10);
 
-          const m = (cfg.h_off % 10) * 10;
+          const m = (cfg.hoff % 10) * 10;
 
           document.getElementById("set_hour_off").placeholder = `(${h}H)`;
           document.getElementById("set_min_off").placeholder = `(${m.toString().padStart(2, '0')})`;
