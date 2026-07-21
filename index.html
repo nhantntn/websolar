@@ -757,7 +757,9 @@ button {
   });
 
   function initFirebase() {
-    const dataRef = ref(firebaseDb, "/");
+    const DEVICE_ID = "esp001";
+
+    const dataRef = ref(firebaseDb, DEVICE_ID);
 
     onValue(
       dataRef,
