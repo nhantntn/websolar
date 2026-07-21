@@ -1637,10 +1637,8 @@ button {
 
           const m = (cfg.h_on % 10) * 10;
 
-          document.getElementById("set_hour_on").placeholder = h;
-
-          document.getElementById("set_min_on").placeholder =
-              m.toString().padStart(2,'0');
+          document.getElementById("set_hour_on").placeholder = `(${h}H)`;
+          document.getElementById("set_min_on").placeholder = `(${m.toString().padStart(2, '0')})`;
 
       }
 
@@ -1650,10 +1648,9 @@ button {
 
           const m = (cfg.h_off % 10) * 10;
 
-          document.getElementById("set_hour_off").placeholder = h;
-
-          document.getElementById("set_min_off").placeholder =
-              m.toString().padStart(2,'0');
+          document.getElementById("set_hour_off").placeholder = `(${h}H)`;
+          document.getElementById("set_min_off").placeholder = `(${m.toString().padStart(2, '0')})`;
+        
 
       }
 
