@@ -1631,27 +1631,34 @@ button {
           document.getElementById("set_pzemB_rx").placeholder =
               `(RX: ${cfg.brx})`;
 
-      if(cfg.hon !== undefined){
+      if (cfg.hon !== undefined && cfg.hon !== null) {
+          const value = Number(cfg.hon);
 
-          const h = Math.floor(cfg.hon / 10);
+          if (!Number.isNaN(value)) {
+              const h = Math.floor(value / 10);
+              const m = (value % 10) * 10;
 
-          const m = (cfg.hon % 10) * 10;
+              document.getElementById("set_hour_on").placeholder =
+                  `(Saved: ${h})`;
 
-          document.getElementById("set_hour_on").placeholder = `(${h}H)`;
-          document.getElementById("set_min_on").placeholder = `(${m.toString().padStart(2, '0')})`;
-
+              document.getElementById("set_min_on").placeholder =
+                  `(Saved: ${String(m).padStart(2, "0")})`;
+          }
       }
 
-      if(cfg.hoff !== undefined){
+      if (cfg.hoff !== undefined && cfg.hoff !== null) {
+          const value = Number(cfg.hoff);
 
-          const h = Math.floor(cfg.hoff / 10);
+          if (!Number.isNaN(value)) {
+              const h = Math.floor(value / 10);
+              const m = (value % 10) * 10;
 
-          const m = (cfg.hoff % 10) * 10;
+              document.getElementById("set_hour_off").placeholder =
+                  `(Saved: ${h})`;
 
-          document.getElementById("set_hour_off").placeholder = `(${h}H)`;
-          document.getElementById("set_min_off").placeholder = `(${m.toString().padStart(2, '0')})`;
-        
-
+              document.getElementById("set_min_off").placeholder =
+                  `(Saved: ${String(m).padStart(2, "0")})`;
+          }
       }
 
   }
