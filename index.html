@@ -435,6 +435,19 @@
     </svg>
     ESP Dashboard</div>
     <div style="display:flex; align-items:center; gap:12px;">
+      <select id="device_selector"
+              onchange="changeDevice(this.value)"
+              style="
+                background:#222;
+                color:#00d078;
+                border:1px solid #00d078;
+                border-radius:6px;
+                padding:4px 6px;
+                font-weight:bold;
+                cursor:pointer;
+              ">
+        <option value="esp001">esp001</option>
+      </select>
       <span id="device_status"
             style="font-size:0.8rem; color:#aaa;">
         ⚪ Đang kiểm tra
@@ -781,14 +794,18 @@
   const firebaseDb = getDatabase(firebaseApp);
   let lastDeviceSeen = 0;
   let offlineTimer = null;
-  const DEVICE_ID =
-    new URLSearchParams(window.location.search).get("device") || "esp001";
+  let DEVICE_ID =
+    new URLSearchParams(window.location.search).get("device") ||
+    localStorage.getItem("selected_device") ||
+    "esp001";
   let socket;
+  let firebaseUnsubscribers = [];
   
   window.addEventListener("load", () => {
+    loadDeviceList();
     initFirebase();
 
-    // WebSocket chỉ hoạt động khi mở trang trực tiếp từ ESP32.
+    // WebSocket chỉ hoạt động khi mở từ ESP
     if (
       window.location.hostname !== "localhost" &&
       window.location.hostname !== "127.0.0.1" &&
@@ -799,85 +816,98 @@
   });
 
   function initFirebase() {
-    const dataRef = ref(firebaseDb, DEVICE_ID + "/data");
+    stopFirebaseListeners();
+    clearDeviceDisplay();
 
-    onValue(dataRef, (snapshot) => {
+    console.log("🔥 Đang đọc thiết bị:", DEVICE_ID);
+
+    const dataRef = ref(firebaseDb, `${DEVICE_ID}/data`);
+
+    const unsubData = onValue(
+      dataRef,
+      snapshot => {
         const data = snapshot.val();
 
-        if (!data) return;
+        if (!data) {
+          console.warn(`⚠️ ${DEVICE_ID} chưa có dữ liệu đo`);
+          return;
+        }
 
         updateMainDisplay(data);
-    });
+      },
+      error => {
+        console.error("❌ Lỗi đọc data:", error);
+      }
+    );
 
-    const configRef = ref(firebaseDb, DEVICE_ID + "/config");
+    firebaseUnsubscribers.push(unsubData);
 
-    onValue(configRef, (snapshot) => {
+    const configRef = ref(firebaseDb, `${DEVICE_ID}/config`);
 
+    const unsubConfig = onValue(
+      configRef,
+      snapshot => {
         const cfg = snapshot.val();
 
-        if(!cfg) return;
+        if (!cfg) {
+          console.warn(`⚠️ ${DEVICE_ID} chưa có config`);
+          return;
+        }
 
         updateSettingFromFirebase(cfg);
-        updateDeviceConfigInfo(cfg);
 
-    });
-    
+        if (typeof updateDeviceConfigInfo === "function") {
+          updateDeviceConfigInfo(cfg);
+        }
+      },
+      error => {
+        console.error("❌ Lỗi đọc config:", error);
+      }
+    );
+
+    firebaseUnsubscribers.push(unsubConfig);
+
     const settingRef = ref(firebaseDb, `${DEVICE_ID}/setting`);
 
-    onValue(settingRef, snapshot => {
-      const setting = snapshot.val();
-      if (!setting) return;
+    const unsubSetting = onValue(
+      settingRef,
+      snapshot => {
+        const setting = snapshot.val();
 
-      console.log("Trạng thái setting:", setting);
+        if (!setting) return;
 
-      const statusElement =
-        document.getElementById("setting_save_status");
-
-      if (!statusElement) return;
-
-      if (setting.apply === true || setting.status === "pending") {
-        statusElement.textContent =
-          "⏳ ESP chưa xử lý, vui lòng chờ...";
-
-        statusElement.style.color = "#ffd43b";
-        return;
+        updateSettingStatusDisplay(setting);
+      },
+      error => {
+        console.error("❌ Lỗi đọc setting:", error);
       }
+    );
 
-      if (setting.status === "done") {
-        statusElement.textContent =
-          `✅ ${setting.message || "Đã lưu cấu hình"}`;
-
-        statusElement.style.color = "#00d078";
-
-        setTimeout(() => {
-          statusElement.textContent = "";
-        }, 5000);
-
-        return;
-      }
-
-      if (setting.status === "error") {
-        statusElement.textContent =
-          `❌ ${setting.message || "ESP không lưu được cấu hình"}`;
-
-        statusElement.style.color = "#ff5555";
-      }
-    });
+    firebaseUnsubscribers.push(unsubSetting);
 
     const statusRef = ref(firebaseDb, `${DEVICE_ID}/status`);
 
-    onValue(statusRef, snapshot => {
-      const status = snapshot.val();
+    const unsubStatus = onValue(
+      statusRef,
+      snapshot => {
+        const status = snapshot.val();
 
-      if (!status) {
+        if (!status) {
+          lastDeviceSeen = 0;
+          setDeviceOffline();
+          return;
+        }
+
+        lastDeviceSeen = Number(status.last_seen || 0);
+        updateDeviceStatus(status);
+      },
+      error => {
+        console.error("❌ Lỗi đọc status:", error);
         setDeviceOffline();
-        return;
       }
+    );
 
-      lastDeviceSeen = Number(status.last_seen || 0);
-
-      updateDeviceStatus(status);
-    });
+    firebaseUnsubscribers.push(unsubStatus);
   }
 
   function initWebSocket() {
@@ -1971,7 +2001,158 @@
         </span>
       `;
     }
+  
+  function updateSettingStatusDisplay(setting) {
+    console.log("Trạng thái setting:", setting);
 
+    const statusElement =
+      document.getElementById("setting_save_status");
+
+    if (!statusElement) return;
+
+    if (setting.apply === true || setting.status === "pending") {
+      statusElement.textContent =
+        "⏳ ESP chưa xử lý, vui lòng chờ...";
+
+      statusElement.style.color = "#ffd43b";
+      return;
+    }
+
+    if (setting.status === "done") {
+      statusElement.textContent =
+        `✅ ${setting.message || "Đã lưu cấu hình"}`;
+
+      statusElement.style.color = "#00d078";
+      return;
+    }
+
+    if (setting.status === "error") {
+      statusElement.textContent =
+        `❌ ${setting.message || "ESP không lưu được cấu hình"}`;
+
+      statusElement.style.color = "#ff5555";
+    }
+  }
+
+  function stopFirebaseListeners() {
+    firebaseUnsubscribers.forEach(unsubscribe => {
+      if (typeof unsubscribe === "function") {
+        unsubscribe();
+      }
+    });
+
+    firebaseUnsubscribers = [];
+  }
+
+  function changeDevice(deviceId) {
+    if (!deviceId || deviceId === DEVICE_ID) return;
+
+    DEVICE_ID = deviceId;
+
+    localStorage.setItem("selected_device", DEVICE_ID);
+
+    const url = new URL(window.location.href);
+    url.searchParams.set("device", DEVICE_ID);
+
+    window.history.replaceState({}, "", url);
+
+    lastDeviceSeen = 0;
+
+    initFirebase();
+  }
+
+  function loadDeviceList() {
+    const rootRef = ref(firebaseDb, "/");
+
+    onValue(
+      rootRef,
+      snapshot => {
+        const rootData = snapshot.val();
+
+        if (!rootData) return;
+
+        const deviceIds = Object.keys(rootData)
+          .filter(key => /^esp\d+$/i.test(key))
+          .sort();
+
+        const selector =
+          document.getElementById("device_selector");
+
+        if (!selector) return;
+
+        selector.innerHTML = "";
+
+        if (deviceIds.length === 0) {
+          const option = document.createElement("option");
+          option.value = DEVICE_ID;
+          option.textContent = DEVICE_ID;
+          selector.appendChild(option);
+          return;
+        }
+
+        deviceIds.forEach(deviceId => {
+          const option = document.createElement("option");
+
+          option.value = deviceId;
+          option.textContent = deviceId;
+
+          if (deviceId === DEVICE_ID) {
+            option.selected = true;
+          }
+
+          selector.appendChild(option);
+        });
+
+        if (!deviceIds.includes(DEVICE_ID)) {
+          DEVICE_ID = deviceIds[0];
+          selector.value = DEVICE_ID;
+
+          localStorage.setItem("selected_device", DEVICE_ID);
+
+          initFirebase();
+        }
+      },
+      error => {
+        console.error("❌ Không đọc được danh sách ESP:", error);
+      }
+    );
+  }
+
+  function clearDeviceDisplay() {
+    const values = {
+      solar_value: "--W",
+      battery_value: "--%",
+      battery_power: "--W",
+      grid_power: "--W",
+      load_value: "--W",
+      diff_power: "Bù Lưới: -- W",
+      total_energy: "Sản Lượng: -- kWh",
+      info_device: DEVICE_ID,
+      info_version: "--",
+      info_online: "--",
+      info_rssi: "--",
+      info_ssid: "--",
+      info_ip: "--",
+      info_uptime: "--",
+      info_heap: "--"
+    };
+
+    Object.entries(values).forEach(([id, value]) => {
+      const element = document.getElementById(id);
+
+      if (element) {
+        element.textContent = value;
+      }
+    });
+
+    const statusEl = document.getElementById("device_status");
+
+    if (statusEl) {
+      statusEl.textContent = "⚪ Đang kiểm tra";
+      statusEl.style.color = "#aaa";
+    }
+  }
+  window.changeDevice = changeDevice;
   window.showSettingTab = showSettingTab;
   window.saveSettings = saveSettings;
   window.scanWifi = scanWifi;
