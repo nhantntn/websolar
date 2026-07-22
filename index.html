@@ -552,13 +552,21 @@ button {
   <div class="layout-header">Thông số mở rộng</div>
   <div id="details_panel" class="details-content">
     <p class="label" style="color: cyan;">ℹ️ Thiết bị</p>
-      <div class="grid-2col">
-      <p>Version: 0.1.2 </span></p>
-      <p>SSID: Be Na</span></p>
-      <p>Local IP: 192.168.1.150</span></p>
-      <p>Public IP: 8.8.8.8</span></p>
+
+    <div class="grid-2col">
+      <p>Thiết bị: <span id="info_device">--</span></p>
+      <p>Firmware: <span id="info_version">--</span></p>
+
+      <p>Trạng thái: <span id="info_online">--</span></p>
+      <p>RSSI: <span id="info_rssi">--</span></p>
+
+      <p>SSID: <span id="info_ssid">--</span></p>
+      <p>Local IP: <span id="info_ip">--</span></p>
+
+      <p>Uptime: <span id="info_uptime">--</span></p>
+      <p>Free Heap: <span id="info_heap">--</span></p>
+    </div>
   </div>
-</div>
 </div>
 
 <div id="settings_layout" class="center-layout hidden">
@@ -641,9 +649,6 @@ button {
 
       <div class="form-group">
         <div class="btn-row">
-          <div id="setting_save_status"
-              style="margin-bottom:10px; font-size:0.9rem; color:#aaa;">
-          </div>
           <button onclick="saveSettings()">💾 Lưu</button>
         </div>
       </div>
@@ -792,6 +797,7 @@ button {
         if(!cfg) return;
 
         updateSettingFromFirebase(cfg);
+        updateDeviceConfigInfo(cfg);
 
     });
     
@@ -1792,24 +1798,62 @@ button {
     const lastSeen = Number(status.last_seen || 0);
     const age = Date.now() - lastSeen;
 
-    if (lastSeen > 0 && age <= 30000) {
-      const rssi = status.rssi !== undefined
-        ? ` | ${status.rssi} dBm`
-        : "";
+    const onlineEl = document.getElementById("info_online");
+    const rssiEl = document.getElementById("info_rssi");
+    const ipEl = document.getElementById("info_ip");
+    const uptimeEl = document.getElementById("info_uptime");
+    const heapEl = document.getElementById("info_heap");
 
-      el.textContent = `🟢 Online${rssi}`;
+    if (lastSeen > 0 && age <= 30000) {
+      const rssiText =
+        status.rssi !== undefined ? ` | ${status.rssi} dBm` : "";
+
+      el.textContent = `🟢 Online${rssiText}`;
       el.style.color = "#00d078";
+
+      if (onlineEl) {
+        onlineEl.textContent = "Online";
+        onlineEl.style.color = "#00d078";
+      }
     } else {
       setDeviceOffline();
+    }
+
+    if (rssiEl) {
+      rssiEl.textContent =
+        status.rssi !== undefined ? `${status.rssi} dBm` : "--";
+    }
+
+    if (ipEl) {
+      ipEl.textContent = status.ip || "--";
+    }
+
+    if (uptimeEl) {
+      uptimeEl.textContent = formatUptime(status.uptime);
+    }
+
+    if (heapEl) {
+      heapEl.textContent =
+        status.heap !== undefined
+          ? `${(Number(status.heap) / 1024).toFixed(1)} KB`
+          : "--";
     }
   }
 
   function setDeviceOffline() {
     const el = document.getElementById("device_status");
-    if (!el) return;
 
-    el.textContent = "🔴 Offline";
-    el.style.color = "#ff5555";
+    if (el) {
+      el.textContent = "🔴 Offline";
+      el.style.color = "#ff5555";
+    }
+
+    const onlineEl = document.getElementById("info_online");
+
+    if (onlineEl) {
+      onlineEl.textContent = "Offline";
+      onlineEl.style.color = "#ff5555";
+    }
   }
 
   offlineTimer = setInterval(() => {
@@ -1824,6 +1868,46 @@ button {
       setDeviceOffline();
     }
   }, 5000);
+
+  function updateDeviceConfigInfo(cfg) {
+    const deviceEl = document.getElementById("info_device");
+    const versionEl = document.getElementById("info_version");
+    const ssidEl = document.getElementById("info_ssid");
+
+    if (deviceEl) {
+      deviceEl.textContent = DEVICE_ID;
+    }
+
+    if (versionEl) {
+      versionEl.textContent = cfg.version ?? "0.1.2";
+    }
+
+    if (ssidEl) {
+      ssidEl.textContent = cfg.ssid || "--";
+    }
+  }
+
+  function formatUptime(totalSeconds) {
+    const seconds = Number(totalSeconds);
+
+    if (!Number.isFinite(seconds) || seconds < 0) {
+      return "--";
+    }
+
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+
+    if (days > 0) {
+      return `${days} ngày ${hours} giờ`;
+    }
+
+    if (hours > 0) {
+      return `${hours} giờ ${minutes} phút`;
+    }
+
+    return `${minutes} phút`;
+  }
 
   window.showSettingTab = showSettingTab;
   window.saveSettings = saveSettings;
