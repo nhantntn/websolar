@@ -417,6 +417,17 @@
       background-color: var(--signal-color);
       box-shadow: 0 0 4px var(--signal-color);
     }
+
+
+    /* ===== OTA Firmware ===== */
+    .ota-card { margin:10px 0; padding:12px; border:1px dashed #444; border-radius:8px; background:rgba(0,0,0,0.12); }
+    .ota-card h4 { margin:0 0 10px; color:#00d078; }
+    .ota-row { display:grid; grid-template-columns:135px 1fr; gap:8px; align-items:center; margin:8px 0; }
+    .ota-row input { width:100%; min-width:0; padding:8px; border-radius:6px; border:1px solid #555; background:var(--bg); color:var(--fg); }
+    .ota-info { display:grid; grid-template-columns:1fr auto; gap:8px 14px; margin:10px 0; font-size:0.9rem; }
+    .ota-muted { color:#aaa; font-size:0.85rem; line-height:1.4; }
+    .ota-update-button { width:100%; margin-top:8px; }
+
   </style>
 </head>
 <body>
@@ -721,34 +732,28 @@
     </div>
     <!-- 🟣 Khối FUNCTION -->
     <div id="setting_function" class="setting-section hidden">
-      <p>⚙️ Function: Firmware/Website Update</p>
-      <!-- Bạn có thể thêm các công tắc hoặc điều khiển ở đây -->
-      <div style="margin:10px 0; padding:8px; border:1px dashed #333; border-radius:8px;">
-      <h4>1) Upload giao diện web trên SPIFFS</h4>
-      <p style="margin:6px 0;">Chọn file (index.html, app.js, styles.css, ...). Bấm UPLOAD để hoàn thành.</p>
-      <input type="file" id="file_web" accept=".html,.htm,.js,.css,.json,.svg,.png,.jpg" />
-      <button onclick="uploadWebFile()">Upload Website</button>
-      <div id="upload_web_status" style="margin-top:6px;color:#0f0;"></div>
-    </div>
-
-    <div style="margin:10px 0; padding:8px; border:1px dashed #333; border-radius:8px;">
-      <h4>2) Upload firmware (.bin)</h4>
-      <p style="margin:6px 0;">Chọn file (.bin) và UPLOAD để cập nhật firmware.</p>
-      <input type="file" id="file_fw" accept=".bin" />
-      <button onclick="uploadFirmware()">Upload firmware</button>
-      <div id="upload_fw_status" style="margin-top:6px;color:#0f0;"></div>
-    </div>
-
-      <div style="margin-top:15px; text-align:center;">
-        <button onclick="resetBoard()" 
-          style="background:#222;color:#f66;border:1px solid #f66;padding:6px 12px;border-radius:6px;">
-          🔁 Reset board ESP32
-        </button>
+      <p>⚙️ Function: Firmware OTA</p>
+      <div class="ota-card">
+        <h4>📦 Công bố phiên bản Firmware mới</h4>
+        <p class="ota-muted">Trước tiên hãy tạo GitHub Release và tải file <b>firmware.bin</b> lên đó. Sau đó nhập phiên bản và đường dẫn tải trực tiếp của file .bin tại đây.</p>
+        <div class="ota-row"><label for="ota_version_input">Phiên bản mới:</label><input type="text" id="ota_version_input" placeholder="Ví dụ: 1.0.3"></div>
+        <div class="ota-row"><label for="ota_url_input">URL file .bin:</label><input type="url" id="ota_url_input" placeholder="https://github.com/.../releases/download/v1.0.3/firmware.bin"></div>
+        <button onclick="uploadFirmware()">☁️ Công bố Firmware</button>
+        <div id="upload_fw_status" style="margin-top:8px;color:#aaa;"></div>
       </div>
-
-    <div style="margin-top:12px;">
-      <button onclick="showMainLayout()" style="background:transparent;color:#0f0;border:1px solid #0f0;padding:6px 12px;border-radius:6px;">Hoàn tất / Quay lại</button>
-    </div>
+      <div class="ota-card">
+        <h4>🔎 Kiểm tra phiên bản</h4>
+        <div class="ota-info">
+          <span>Thiết bị đang chọn:</span><strong id="ota_device_id">--</strong>
+          <span>Firmware hiện tại:</span><strong id="ota_current_version">--</strong>
+          <span>Firmware mới nhất:</span><strong id="ota_latest_version">--</strong>
+          <span>Ngày công bố:</span><strong id="ota_uploaded_at">--</strong>
+        </div>
+        <div id="ota_compare_status" class="ota-muted">Đang kiểm tra phiên bản...</div>
+        <button id="ota_update_button" class="ota-update-button hidden" onclick="requestFirmwareUpdate()">⬆️ Cập nhật Firmware cho thiết bị này</button>
+      </div>
+      <div style="margin-top:15px; text-align:center;"><button onclick="resetBoard()" style="background:#222;color:#f66;border:1px solid #f66;padding:6px 12px;border-radius:6px;">🔁 Reset board ESP32</button></div>
+      <div style="margin-top:12px;"><button onclick="showMainLayout()" style="background:transparent;color:#0f0;border:1px solid #0f0;padding:6px 12px;border-radius:6px;">Hoàn tất / Quay lại</button></div>
     </div>
     <!-- 🔵 Khối ABOUT -->
     <div id="setting_about" class="setting-section hidden">
@@ -776,7 +781,8 @@
     getDatabase,
     ref,
     onValue,
-    update
+    update,
+    serverTimestamp
   } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
 
   const firebaseConfig = {
@@ -800,6 +806,8 @@
     "esp001";
   let socket;
   let firebaseUnsubscribers = [];
+  let currentDeviceConfig = null;
+  let latestOtaInfo = null;
   
   window.addEventListener("load", () => {
     loadDeviceList();
@@ -818,6 +826,9 @@
   function initFirebase() {
     stopFirebaseListeners();
     clearDeviceDisplay();
+    currentDeviceConfig = null;
+    latestOtaInfo = null;
+    updateOtaDisplay();
 
     console.log("🔥 Đang đọc thiết bị:", DEVICE_ID);
 
@@ -854,7 +865,9 @@
           return;
         }
 
+        currentDeviceConfig = cfg;
         updateSettingFromFirebase(cfg);
+        updateOtaDisplay();
 
         if (typeof updateDeviceConfigInfo === "function") {
           updateDeviceConfigInfo(cfg);
@@ -908,6 +921,21 @@
     );
 
     firebaseUnsubscribers.push(unsubStatus);
+
+    const otaRef = ref(firebaseDb, "ota");
+    const unsubOta = onValue(
+      otaRef,
+      snapshot => {
+        latestOtaInfo = snapshot.val();
+        updateOtaDisplay();
+      },
+      error => {
+        console.error("❌ Lỗi đọc nhánh ota:", error);
+        latestOtaInfo = null;
+        updateOtaDisplay();
+      }
+    );
+    firebaseUnsubscribers.push(unsubOta);
   }
 
   function initWebSocket() {
@@ -1201,81 +1229,78 @@
     });
   }
 
-  // Upload web file (SPIFFS)
-  function uploadWebFile(){
-    const inp = document.getElementById('file_web');
-    const status = document.getElementById('upload_web_status');
-    if(!inp.files.length){ alert('Chọn file web để upload.'); return; }
-    const file = inp.files[0];
-    const form = new FormData();
-    // form field name will be ignored by Async handler; filename is important
-    form.append('file', file, file.name);
+  // Ghi thông tin firmware GitHub Release vào nhánh /ota.
+  async function uploadFirmware() {
+    const versionInput = document.getElementById("ota_version_input");
+    const urlInput = document.getElementById("ota_url_input");
+    const status = document.getElementById("upload_fw_status");
+    const version = versionInput.value.trim();
+    const url = urlInput.value.trim();
 
-    status.textContent = '🔄 Đang upload...';
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/upload_file', true);
+    if (!version) { alert("Hãy nhập số phiên bản firmware."); versionInput.focus(); return; }
+    if (!isValidFirmwareVersion(version)) { alert("Phiên bản không hợp lệ. Ví dụ đúng: 1.0.3"); versionInput.focus(); return; }
+    if (!url || !/^https:\/\//i.test(url) || !/\.bin(?:\?|$)/i.test(url)) { alert("Hãy nhập đường dẫn HTTPS trực tiếp đến file .bin."); urlInput.focus(); return; }
+    if (!confirm(`Công bố firmware ${version}?\n\n${url}`)) return;
 
-    xhr.upload.onprogress = function(e){
-      if(e.lengthComputable){
-        status.textContent = `🔄 Upload: ${Math.round(e.loaded / e.total * 100)}%`;
-      }
-    };
-    xhr.onload = function(){
-      if(xhr.status === 200){
-        status.style.color = '#0f0';
-        status.textContent = '✅ Upload file web thành công. Nhấn F5 để reload giao diện.';
-      } else {
-        status.style.color = '#f55';
-        status.textContent = '❌ Upload file web thất bại.';
-      }
-    };
-    xhr.onerror = function(){
-      status.style.color = '#f55';
-      status.textContent = '❌ Lỗi kết nối khi upload file web.';
-    };
-    xhr.send(form);
+    status.textContent = "⏳ Đang ghi thông tin OTA lên Firebase...";
+    status.style.color = "#ffd43b";
+    try {
+      await update(ref(firebaseDb, "ota"), { version, url, uploaded_at: serverTimestamp() });
+      status.textContent = `✅ Đã công bố firmware ${version}`;
+      status.style.color = "#00d078";
+      versionInput.value = "";
+      urlInput.value = "";
+    } catch (error) {
+      console.error("❌ Lỗi ghi OTA:", error);
+      status.textContent = "❌ Không thể ghi thông tin OTA lên Firebase";
+      status.style.color = "#ff5555";
+    }
   }
 
-  // Upload firmware (.bin)
-  function uploadFirmware(){
-    const inp = document.getElementById('file_fw');
-    const status = document.getElementById('upload_fw_status');
-    if(!inp.files.length){ alert('Chọn file .bin firmware.'); return; }
-    const file = inp.files[0];
-    const form = new FormData();
-    form.append('file', file, file.name);
-
-    status.textContent = '🔄 Đang upload firmware...';
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/update_fw', true);
-
-    xhr.upload.onprogress = function(e){
-      if(e.lengthComputable){
-        status.textContent = `🔄 Upload FW: ${Math.round(e.loaded / e.total * 100)}%`;
-      }
-      else
-      {
-        status.textContent = `🔄 Upload FW: OK`;
-      }
-    };
-    xhr.onload = function(){
-      if(xhr.status === 200 && xhr.responseText.trim() === "OK"){
-        status.style.color = '#0f0';
-        status.textContent = '✅ Cập nhật Firmware thành công. Vui lòng reset lại bo ESP.';
-        resetupdate();
-      } else {
-        status.style.color = '#f55';
-        status.textContent = '❌ Firmware upload failed.';
-      }
-    };
-    xhr.onerror = function(){
-      status.style.color = '#f55';
-      status.textContent = '❌ Lỗi kết nối khi upload firmware.';
-    };
-    xhr.send(form);
+  function isValidFirmwareVersion(version) { return /^v?\d+(?:\.\d+){1,3}$/.test(String(version).trim()); }
+  function normalizeVersion(version) { return String(version || "0").trim().replace(/^v/i, "").split(".").map(part => Number.parseInt(part, 10) || 0); }
+  function compareVersions(versionA, versionB) {
+    const a = normalizeVersion(versionA), b = normalizeVersion(versionB);
+    const length = Math.max(a.length, b.length);
+    for (let i = 0; i < length; i++) {
+      const partA = a[i] || 0, partB = b[i] || 0;
+      if (partA > partB) return 1;
+      if (partA < partB) return -1;
+    }
+    return 0;
+  }
+  function formatOtaDate(timestamp) {
+    const value = Number(timestamp || 0);
+    return value ? new Date(value).toLocaleString("vi-VN", { hour12:false }) : "--";
+  }
+  function updateOtaDisplay() {
+    const deviceEl=document.getElementById("ota_device_id"), currentEl=document.getElementById("ota_current_version"), latestEl=document.getElementById("ota_latest_version"), dateEl=document.getElementById("ota_uploaded_at"), compareEl=document.getElementById("ota_compare_status"), updateButton=document.getElementById("ota_update_button");
+    if (!deviceEl || !currentEl || !latestEl || !dateEl || !compareEl || !updateButton) return;
+    const currentVersion=currentDeviceConfig?.fw_version || currentDeviceConfig?.version || "--";
+    const latestVersion=latestOtaInfo?.version || "--";
+    deviceEl.textContent=DEVICE_ID; currentEl.textContent=currentVersion; latestEl.textContent=latestVersion; dateEl.textContent=formatOtaDate(latestOtaInfo?.uploaded_at);
+    updateButton.classList.add("hidden"); updateButton.disabled=false;
+    if (!latestOtaInfo?.version || !latestOtaInfo?.url) { compareEl.textContent="Chưa có thông tin firmware mới trong Firebase."; compareEl.style.color="#aaa"; return; }
+    if (currentVersion === "--") { compareEl.textContent="Chưa nhận được phiên bản firmware hiện tại từ ESP."; compareEl.style.color="#ffd43b"; return; }
+    const comparison=compareVersions(latestVersion,currentVersion);
+    if (comparison>0) { compareEl.textContent=`🆕 Có phiên bản mới ${latestVersion}`; compareEl.style.color="#00d078"; updateButton.classList.remove("hidden"); return; }
+    if (comparison===0) { compareEl.textContent="✅ Thiết bị đang dùng phiên bản mới nhất."; compareEl.style.color="#00d078"; return; }
+    compareEl.textContent="ℹ️ Firmware trên thiết bị mới hơn bản đang công bố."; compareEl.style.color="#ffd43b";
+  }
+  async function requestFirmwareUpdate() {
+    if (!latestOtaInfo?.version || !latestOtaInfo?.url) { alert("Không tìm thấy thông tin firmware mới."); return; }
+    const currentVersion=currentDeviceConfig?.fw_version || currentDeviceConfig?.version || "không rõ";
+    if (!confirm(`Cập nhật ${DEVICE_ID}?\n\nHiện tại: ${currentVersion}\nPhiên bản mới: ${latestOtaInfo.version}\n\nESP sẽ tải firmware và tự khởi động lại.`)) return;
+    const button=document.getElementById("ota_update_button"), compareEl=document.getElementById("ota_compare_status");
+    button.disabled=true; compareEl.textContent="⏳ Đang gửi lệnh cập nhật đến ESP..."; compareEl.style.color="#ffd43b";
+    try {
+      await update(ref(firebaseDb, `${DEVICE_ID}/setting`), { upfw:true, status:"pending", message:`Chờ cập nhật firmware ${latestOtaInfo.version}` });
+      compareEl.textContent="✅ Đã gửi lệnh. Đang chờ ESP thực hiện OTA..."; compareEl.style.color="#00d078";
+    } catch (error) {
+      console.error("❌ Lỗi gửi lệnh OTA:", error); compareEl.textContent="❌ Không thể gửi lệnh cập nhật."; compareEl.style.color="#ff5555"; button.disabled=false;
+    }
   }
 
-  
   function connectToWifi() {
     const ssid = document.getElementById("set_ssid").value;
     const pass = document.getElementById("set_pass").value;
@@ -2157,8 +2182,8 @@
   window.saveSettings = saveSettings;
   window.scanWifi = scanWifi;
   window.connectToWifi = connectToWifi;
-  window.uploadWebFile = uploadWebFile;
   window.uploadFirmware = uploadFirmware;
+  window.requestFirmwareUpdate = requestFirmwareUpdate;
   window.resetBoard = resetBoard;
   window.showMainLayout = showMainLayout;
   window.toggleTheme = toggleTheme;
