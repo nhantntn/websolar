@@ -1047,19 +1047,22 @@
     return null;
   }
 
-  function resetBoard(){
-    if(!confirm("Bạn có chắc muốn khởi động lại ESP32 không?")) return;
-    fetch('/reset')
-      .then(resp => {
-        if(resp.ok){
-          alert("ESP32 đang khởi động lại...");
-          setTimeout(()=>location.reload(), 6000); // reload sau vài giây
-        } else {
-          alert("Không gửi được lệnh reset!");
-        }
-      })
-      //.catch(()=>alert("Lỗi kết nối khi gửi lệnh reset!"));
+  async function resetBoard() {
+    if (!confirm(`Bạn có chắc muốn khởi động lại ${DEVICE_ID} không?`)) return;
+
+    try {
+      await update(ref(firebaseDb, `${DEVICE_ID}/setting`), {
+        reboot: true
+      });
+
+      alert(`Đã gửi lệnh khởi động lại ${DEVICE_ID}`);
+    }
+    catch (error) {
+      console.error("Lỗi gửi lệnh reboot:", error);
+      alert("Không gửi được lệnh khởi động lại!");
+    }
   }
+
   function resetupdate(){
     if(!confirm(" Khởi động lại ESP32 để hoàn tất quá trình cập nhật FW ")) return;
     fetch('/reset')
@@ -1554,6 +1557,10 @@
           <p>Power: <span id="grid_power_detail">--W</span></p>
           <p>Energy: <span id="grid_energy">--kWh</span></p>
         </div>
+        <button onclick="clearGridEnergy()"
+          style="margin-top:12px;padding:6px 12px;">
+          🗑️ Xóa số kWh
+        </button>
       `;
     }
 
@@ -1950,7 +1957,7 @@
 
   function updateDeviceConfigInfo(cfg) {
     const deviceEl = document.getElementById("info_device");
-    const versionEl = document.getElementById("fw_version");
+    const versionEl = document.getElementById("info_version");
     const ssidEl = document.getElementById("info_ssid");
 
     if (deviceEl) {
@@ -1958,7 +1965,7 @@
     }
 
     if (versionEl) {
-      versionEl.textContent = cfg.version ?? "0.1.2";
+      versionEl.textContent = cfg.fw_version ?? "--";
     }
 
     if (ssidEl) {
@@ -2177,6 +2184,22 @@
       statusEl.style.color = "#aaa";
     }
   }
+
+  async function clearGridEnergy() {
+    if (!confirm(`Bạn có chắc muốn xóa số kWh của ${DEVICE_ID} không?`)) return;
+
+    try {
+      await update(ref(firebaseDb, `${DEVICE_ID}/setting`), {
+        clear_energy: true
+      });
+
+      alert("Đã gửi lệnh xóa số kWh, đang chờ ESP xử lý...");
+    }
+    catch (error) {
+      console.error("Lỗi gửi lệnh xóa kWh:", error);
+      alert("Không gửi được lệnh xóa kWh!");
+    }
+  }
   window.changeDevice = changeDevice;
   window.showSettingTab = showSettingTab;
   window.saveSettings = saveSettings;
@@ -2187,6 +2210,7 @@
   window.resetBoard = resetBoard;
   window.showMainLayout = showMainLayout;
   window.toggleTheme = toggleTheme;
+  window.clearGridEnergy = clearGridEnergy;
 </script>
 </body>
 </html>
