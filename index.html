@@ -657,8 +657,6 @@
     <!-- 🟡 Khối NETWORK: giao diện hiện tại -->
     <div id="setting_network" class="setting-section hidden">
       <div class="form-group">
-        <button onclick="scanWifi()">🔍 Quét WiFi</button><br>
-        <div id="wifi_list" style="margin-top: 5px;"></div><br>
         <label for="ssid">SSID:
         <input type="text" id="set_ssid" placeholder="Nhập tên WiFi hoặc chọn bên dưới"/>
       </div>
@@ -681,7 +679,7 @@
       <div class="form-group">
         <div class="btn-row">
           <button onclick="saveSettings()">💾 Lưu</button>
-          <button id="connect_btn" onclick="connectToWifi()" style="display: none;">📡 Kết nối WiFi</button>
+          
         </div>
       </div>
     </div>
@@ -759,7 +757,7 @@
     new URLSearchParams(window.location.search).get("device") ||
     localStorage.getItem("selected_device") ||
     "esp001";
-  let socket;
+  //let socket;
   let firebaseUnsubscribers = [];
   let currentDeviceConfig = null;
   let latestOtaInfo = null;
@@ -768,14 +766,6 @@
     loadDeviceList();
     initFirebase();
 
-    // WebSocket chỉ hoạt động khi mở từ ESP
-    if (
-      window.location.hostname !== "localhost" &&
-      window.location.hostname !== "127.0.0.1" &&
-      !window.location.hostname.endsWith("github.io")
-    ) {
-      initWebSocket();
-    }
   });
 
   function initFirebase() {
@@ -891,102 +881,7 @@
     firebaseUnsubscribers.push(unsubOta);
   }
 
-  function initWebSocket() {
-    socket = new WebSocket(`ws://${window.location.host}/ws`);
 
-    socket.onopen = () => {
-      // Bạn có thể hiển thị trạng thái kết nối ở đây (nếu muốn)
-      socket.send(JSON.stringify({ type: "get_system_config" }));
-    };
-
-    socket.onclose = () => {
-      console.warn("⚠️ WebSocket closed. Thử kết nối lại sau 2s...");
-      setTimeout(initWebSocket, 2000); // Thử lại sau 2 giây
-    };
-
-    socket.onerror = (e) => {
-      console.error("❌ WebSocket error:", e);
-      socket.close(); // Đảm bảo gọi close để onclose được kích hoạt
-    };
-
-    socket.onmessage = (event) => {
-      
-      // Xử lý phản hồi từ ESP32 nếu cần
-        try {
-          const data = JSON.parse(event.data);
-          if (data.ssids) {
-            handleScanResult(data.ssids);
-          }
-
-          if (data.type === "system_config") {
-              if (data.mode) {
-                const connectBtn = document.getElementById("connect_btn");
-                connectBtn.style.display = "inline-block"; // Hiện nút khi đang là Access Point
-              } else {
-                const connectBtn = document.getElementById("connect_btn");
-                connectBtn.style.display = "none"; // Ẩn nếu không phải
-              }
-
-            if (data.timeconnect) {
-              document.getElementById("set_timeconnect").placeholder = `(Saved: ${data.timeconnect})`;
-            }
-            if (data.timeupload) {
-              document.getElementById("set_timeupload").placeholder = `(Saved: ${data.timeupload})`;
-            }
-            if (data.startdate) {
-              document.getElementById("set_startdate").placeholder = `(Saved: ${data.startdate})`;
-            }
-            if (data.timeupdatedns) {
-              document.getElementById("set_timeupdatedns").placeholder = `(Saved: ${data.timeupdatedns})`;
-            }
-
-            if (data.h_on) {
-              const h = Math.floor(data.h_on / 10);
-              const m = data.h_on % 10 * 10;
-              document.getElementById("set_hour_on").placeholder = `(${h}H)`;
-              document.getElementById("set_min_on").placeholder = `(${m.toString().padStart(2, '0')})`;
-            }
-
-            if (data.h_off) {
-              const h = Math.floor(data.h_off / 10);
-              const m = data.h_off % 10 * 10;
-              document.getElementById("set_hour_off").placeholder = `(${h}H)`;
-              document.getElementById("set_min_off").placeholder = `(${m.toString().padStart(2, '0')})`;
-            }
-            
-            if (data.ledpin) {
-              document.getElementById("set_ledpin").placeholder = `(GPIO ${data.ledpin})`;
-            }
-
-            if (data.tx17) {
-              document.getElementById("set_pzem17_tx").placeholder = `(TX:${data.tx17})`;
-            }
-
-            if (data.rx17) {
-              document.getElementById("set_pzem17_rx").placeholder = `(RX:${data.rx17})`;
-            }
-
-            if (data.atx) {
-              document.getElementById("set_pzemA_tx").placeholder = `(TX:${data.atx})`;
-            }
-
-            if (data.arx) {
-              document.getElementById("set_pzemA_rx").placeholder = `(RX:${data.arx})`;
-            }
-
-            if (data.btx) {
-              document.getElementById("set_pzemB_tx").placeholder = `(TX:${data.btx})`;
-            }
-
-            if (data.brx) {
-              document.getElementById("set_pzemB_rx").placeholder = `(RX:${data.brx})`;
-            }
-          }
-        } catch (e) {
-          console.warn("Không phải JSON hợp lệ.");
-        }
-    };
-  }
 
   function getThisTab() {
     const activeSection = document.querySelector(".setting-section.active");
@@ -1030,29 +925,6 @@
     if (element) element.classList.add("active");
   }
 
-  function scanWifi() {
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
-      alert("❌ WebSocket chưa sẵn sàng!");
-      return;
-    }
-    socket.send(JSON.stringify({ action: "scan_wifi" }));
-    document.getElementById("wifi_list").innerHTML = "🔄 Đang quét WiFi...";
-  }
-
-  // Xử lý dữ liệu trả về từ ESP
-  function handleScanResult(ssids) {
-    const wifiList = document.getElementById("wifi_list");
-    wifiList.innerHTML = ""; // Xóa cũ
-    ssids.forEach(ssid => {
-      const btn = document.createElement("button");
-      btn.textContent = ssid;
-      btn.className = "ssid-item";
-      btn.onclick = () => {
-        document.getElementById("set_ssid").value = ssid;
-      };
-      wifiList.appendChild(btn);
-    });
-  }
   
   async function saveSettings() {
     const thistab = getThisTab();
@@ -1238,33 +1110,6 @@
       compareEl.textContent="✅ Đã gửi lệnh. Đang chờ ESP thực hiện OTA..."; compareEl.style.color="#00d078";
     } catch (error) {
       console.error("❌ Lỗi gửi lệnh OTA:", error); compareEl.textContent="❌ Không thể gửi lệnh cập nhật."; compareEl.style.color="#ff5555"; button.disabled=false;
-    }
-  }
-
-  function connectToWifi() {
-    const ssid = document.getElementById("set_ssid").value;
-    const pass = document.getElementById("set_pass").value;
-
-    if (!ssid) {
-      alert("❌ SSID không được để trống!");
-      return;
-    }
-
-    // Gửi yêu cầu kết nối đến ESP
-    const config = {
-      type: "connect_wifi",
-      data: { ssid, pass }
-    };
-
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify(config));
-      
-      alert("🚀 Đang cố gắng kết nối WiFi...");
-      // 🔽 Xoá giá trị các input có ID bắt đầu bằng 'set_' trong tab hiện tại
-      clearInputs("network");
-
-    } else {
-      alert("❌ WebSocket chưa sẵn sàng!");
     }
   }
 
@@ -2133,8 +1978,6 @@
   window.changeDevice = changeDevice;
   window.showSettingTab = showSettingTab;
   window.saveSettings = saveSettings;
-  window.scanWifi = scanWifi;
-  window.connectToWifi = connectToWifi;
   window.uploadFirmware = uploadFirmware;
   window.requestFirmwareUpdate = requestFirmwareUpdate;
   window.resetBoard = resetBoard;
