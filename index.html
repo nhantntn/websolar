@@ -163,14 +163,7 @@
       font-size: 1.2rem;
       cursor: pointer;
     }
-    @keyframes dashmove {
-    to {
-        stroke-dashoffset: -10;
-      }
-    }
-    .line-animated {
-      animation: dashmove 1s linear infinite;
-    }
+   
     #bgCanvas {
       position: fixed;
       top: 0;
@@ -280,15 +273,6 @@
       box-shadow: 0 0 20px #000;
     }
 
-    .settings-card {
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-    }
-
-    .settings-card h2 {
-      text-align: center;
-    }
 
     .form-group label {
       display: block;
@@ -319,27 +303,6 @@
       display: none;
     }
 
-    .setting-tabs {
-      display: flex;
-      justify-content: center;
-      gap: 12px;
-      margin-bottom: 16px;
-    }
-
-    .setting-tabs button {
-      background: #333;
-      color: #fff;
-      border: none;
-      padding: 8px 16px;
-      border-radius: 10px;
-      cursor: pointer;
-      font-weight: bold;
-      transition: background 0.3s ease;
-    }
-
-    .setting-tabs button:hover {
-      background: #555;
-    }
 
     .setting-section {
       display: none;
@@ -557,14 +520,6 @@
     <stop offset="100%" stop-color="#fff7b2" />     <!-- Vàng nhạt -->
   </linearGradient>
 
-  <linearGradient id="greenGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-    <stop offset="0%" stop-color="#b9fbc0" />   <!-- Xanh lá nhạt -->
-    <stop offset="100%" stop-color="#014421" /> <!-- Xanh lá đậm -->
-  </linearGradient>
-
-          <marker id="arrowhead" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-        <path d="M0,0 L0,6 L6,3 Z" fill="red" />
-      </marker>
       </defs>
       <!-- Solar -> Load -->
       <path id="line_solar_to_load" stroke="#00d078" stroke-width="2" fill="none" visibility="hidden"/>
@@ -1063,19 +1018,7 @@
     }
   }
 
-  function resetupdate(){
-    if(!confirm(" Khởi động lại ESP32 để hoàn tất quá trình cập nhật FW ")) return;
-    fetch('/reset')
-      .then(resp => {
-        if(resp.ok){
-          alert("ESP32 đang khởi động lại...");
-          setTimeout(()=>location.reload(), 6000); // reload sau vài giây
-        } else {
-          alert("Không gửi được lệnh reset!");
-        }
-      })
-      //.catch(()=>alert("Lỗi kết nối khi gửi lệnh reset!"));
-  }
+  
   function showSettingTab(tabName, element) {
     // Ẩn tất cả layout
     
@@ -1324,7 +1267,7 @@
       console.log("📤 Gửi yêu cầu kết nối WiFi:", config);
       alert("🚀 Đang cố gắng kết nối WiFi...");
       // 🔽 Xoá giá trị các input có ID bắt đầu bằng 'set_' trong tab hiện tại
-      clearInputs(thistab);
+      clearInputs("network");
 
     } else {
       alert("❌ WebSocket chưa sẵn sàng!");
@@ -1788,13 +1731,6 @@
     }
     drawParticles2();
 
-    // Khi trang tải, hiển thị mặc định tab Status
-    window.addEventListener("load", () => {
-      const defaultTab = document.querySelector('.setting-tab.active');
-      if (defaultTab) {
-        defaultTab.click();
-      }
-    });
 
   function updateSettingFromFirebase(cfg){
 
