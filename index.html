@@ -785,8 +785,6 @@
     latestOtaInfo = null;
     updateOtaDisplay();
 
-    console.log("🔥 Đang đọc thiết bị:", DEVICE_ID);
-
     const dataRef = ref(firebaseDb, `${DEVICE_ID}/data`);
 
     const unsubData = onValue(
@@ -897,7 +895,6 @@
     socket = new WebSocket(`ws://${window.location.host}/ws`);
 
     socket.onopen = () => {
-      console.log("✅ WebSocket connected");
       // Bạn có thể hiển thị trạng thái kết nối ở đây (nếu muốn)
       socket.send(JSON.stringify({ type: "get_system_config" }));
     };
@@ -913,7 +910,7 @@
     };
 
     socket.onmessage = (event) => {
-      console.log("📨 WebSocket message Setting:", event.data);
+      
       // Xử lý phản hồi từ ESP32 nếu cần
         try {
           const data = JSON.parse(event.data);
@@ -958,9 +955,6 @@
             }
             
             if (data.ledpin) {
-              document.getElementById("set_ledpin").placeholder = `(GPIO ${data.ledpin})`;
-            }
-            else{
               document.getElementById("set_ledpin").placeholder = `(GPIO ${data.ledpin})`;
             }
 
@@ -1153,7 +1147,7 @@
         statusElement.textContent = "⏳ Đã gửi, đang chờ ESP xử lý...";
         statusElement.style.color = "#ffd43b";
       }
-      console.log("Đã gửi setting lên Firebase:", settingData);
+      
 
       alert("Đã gửi cấu hình. Đang chờ ESP xử lý...");
 
@@ -1264,7 +1258,7 @@
 
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(config));
-      console.log("📤 Gửi yêu cầu kết nối WiFi:", config);
+      
       alert("🚀 Đang cố gắng kết nối WiFi...");
       // 🔽 Xoá giá trị các input có ID bắt đầu bằng 'set_' trong tab hiện tại
       clearInputs("network");
@@ -1971,7 +1965,7 @@
     }
   
   function updateSettingStatusDisplay(setting) {
-    console.log("Trạng thái setting:", setting);
+    
 
     const statusElement =
       document.getElementById("setting_save_status");
