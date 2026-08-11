@@ -445,12 +445,50 @@
     }
 
     @media (max-width: 600px) {
-      .chart-wrap {
-        height: 280px;
+
+      .chart-card {
+        width: calc(100% - 12px);
+        margin: 10px 6px;
+        padding: 10px 6px;
+        border-radius: 10px;
       }
 
       .chart-toolbar {
-        justify-content: center;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 5px;
+        margin-bottom: 10px;
+      }
+
+      .chart-range {
+        width: 100%;
+        padding: 7px 2px;
+        font-size: 12px;
+      }
+
+      .chart-day-select {
+        grid-column: 1 / -1;
+        width: 100%;
+        box-sizing: border-box;
+        margin-top: 3px;
+      }
+
+      .chart-wrap {
+        height: 260px;
+        width: 100%;
+      }
+
+      .chart-legend {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 4px;
+        margin-top: 10px;
+        text-align: center;
+        font-size: 11px;
+      }
+
+      .chart-legend label {
+        white-space: nowrap;
       }
     }
 
