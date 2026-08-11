@@ -1,6 +1,6 @@
 let powerChart = null;
 let currentRange = "live";
-let liveTimer = null;
+let historyUnsubscribe = null;
 
 const chartData = {
   labels: [],
@@ -37,49 +37,6 @@ function createTestData() {
   }
 }
 
-function addLiveTestPoint() {
-  if (!powerChart || currentRange !== "live") return;
-
-  const now = new Date();
-
-  // Thêm mốc thời gian mới
-  powerChart.data.labels.push(
-    now.toLocaleTimeString("vi-VN", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit"
-    })
-  );
-
-  // Tạm thời vẫn dùng dữ liệu giả
-  powerChart.data.datasets[0].data.push(
-    Math.round(1200 + Math.random() * 1800)
-  );
-
-  powerChart.data.datasets[1].data.push(
-    Math.round(-500 + Math.random() * 1000)
-  );
-
-  powerChart.data.datasets[2].data.push(
-    Math.round(Math.random() * 800)
-  );
-
-  powerChart.data.datasets[3].data.push(
-    Math.round(1000 + Math.random() * 1800)
-  );
-
-  // Live chỉ giữ 60 điểm = 30 phút
-  if (powerChart.data.labels.length > 60) {
-    powerChart.data.labels.shift();
-
-    powerChart.data.datasets.forEach(dataset => {
-      dataset.data.shift();
-    });
-  }
-
-  // Không animation lại toàn bộ chart
-  powerChart.update("none");
-}
 
 function createChart() {
   const canvas = document.getElementById("powerChart");
@@ -250,27 +207,24 @@ function initChartRangeButtons() {
 
       currentRange = button.dataset.range;
 
-        if (currentRange === "day") {
+      if (currentRange === "day") {
         daySelect.classList.remove("hidden");
-        } else {
+      } else {
         daySelect.classList.add("hidden");
-        }
+      }
 
-        loadTestRange(currentRange);
-        updateChartData();
+      if (currentRange === "live") {
+        startLiveChart();
+        return;
+      }
+
+      // Tạm thời 12h / 24h / Ngày vẫn dùng dữ liệu test
+      loadTestRange(currentRange);
+      updateChartData(chartData);
     });
 
   });
 }
-
-window.addEventListener("load", () => {
-  createTestData();
-  createChart();
-  initChartCheckboxes();
-  initChartRangeButtons();
-
-  liveTimer = setInterval(addLiveTestPoint, 30000);
-});
 
 function loadTestRange(range) {
   chartData.labels = [];
@@ -334,14 +288,168 @@ function loadTestRange(range) {
   }
 }
 
-function updateChartData() {
+function updateChartData(data) {
   if (!powerChart) return;
 
-  powerChart.data.labels = chartData.labels;
-  powerChart.data.datasets[0].data = chartData.pv;
-  powerChart.data.datasets[1].data = chartData.bat;
-  powerChart.data.datasets[2].data = chartData.grid;
-  powerChart.data.datasets[3].data = chartData.load;
+  powerChart.data.labels = data.labels;
+  powerChart.data.datasets[0].data = data.pv;
+  powerChart.data.datasets[1].data = data.bat;
+  powerChart.data.datasets[2].data = data.grid;
+  powerChart.data.datasets[3].data = data.load;
 
-  powerChart.update();
+  powerChart.update("none");
 }
+
+function getDateKey(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+
+  return `${y}-${m}-${d}`;
+}
+
+function historyKeyToSeconds(key) {
+  const p = key.split("-");
+
+  if (p.length !== 3) return -1;
+
+  return (
+    Number(p[0]) * 3600 +
+    Number(p[1]) * 60 +
+    Number(p[2])
+  );
+}
+
+function buildLiveData(history) {
+  const labels = [];
+  const pv = [];
+  const bat = [];
+  const grid = [];
+  const load = [];
+
+  const now = new Date();
+
+  // Ép về đúng slot 30 giây hiện tại
+  let nowSeconds =
+    now.getHours() * 3600 +
+    now.getMinutes() * 60 +
+    now.getSeconds();
+
+  nowSeconds = Math.floor(nowSeconds / 30) * 30;
+
+  // Tạo map dữ liệu Firebase theo số giây trong ngày
+  const historyMap = {};
+
+  if (history) {
+    Object.entries(history).forEach(([key, value]) => {
+      const sec = historyKeyToSeconds(key);
+
+      if (sec >= 0) {
+        historyMap[sec] = value;
+      }
+    });
+  }
+
+  // 60 điểm = 30 phút
+  for (let i = 59; i >= 0; i--) {
+    const sec = nowSeconds - i * 30;
+
+    let realSec = sec;
+
+    // Giai đoạn đầu Live chỉ đọc ngày hiện tại.
+    if (realSec < 0) realSec = 0;
+
+    const h = Math.floor(realSec / 3600);
+    const m = Math.floor((realSec % 3600) / 60);
+    const s = realSec % 60;
+
+    labels.push(
+      `${String(h).padStart(2, "0")}:` +
+      `${String(m).padStart(2, "0")}:` +
+      `${String(s).padStart(2, "0")}`
+    );
+
+    const sample = historyMap[realSec];
+
+    if (sample) {
+      pv.push(Number(sample.pv) || 0);
+      bat.push(Number(sample.bat) || 0);
+      grid.push(Number(sample.grid) || 0);
+      load.push(Number(sample.load) || 0);
+    } else {
+      // Không có sample = 0 đúng như ta đã thống nhất
+      pv.push(0);
+      bat.push(0);
+      grid.push(0);
+      load.push(0);
+    }
+  }
+
+  return {
+    labels,
+    pv,
+    bat,
+    grid,
+    load
+  };
+}
+
+function startLiveChart() {
+  if (!window.chartFirebase) {
+    console.error("Firebase chưa sẵn sàng cho Chart");
+    return;
+  }
+
+  // Hủy listener cũ khi đổi chế độ hoặc đổi thiết bị
+  if (historyUnsubscribe) {
+    historyUnsubscribe();
+    historyUnsubscribe = null;
+  }
+
+  const {
+    db,
+    ref,
+    onValue
+  } = window.chartFirebase;
+
+  const deviceId = window.getChartDeviceId();
+  const today = getDateKey();
+
+  const historyRef = ref(
+    db,
+    `${deviceId}/history/${today}`
+  );
+
+  historyUnsubscribe = onValue(
+    historyRef,
+
+    snapshot => {
+      if (currentRange !== "live") return;
+
+      const history = snapshot.val() || {};
+
+      const data = buildLiveData(history);
+
+      updateChartData(data);
+    },
+
+    error => {
+      console.error("❌ Lỗi đọc history:", error);
+    }
+  );
+}
+
+window.addEventListener("load", () => {
+  chartData.labels = [];
+  chartData.pv = [];
+  chartData.bat = [];
+  chartData.grid = [];
+  chartData.load = [];
+
+  createChart();
+
+  initChartCheckboxes();
+  initChartRangeButtons();
+
+  startLiveChart();
+});
