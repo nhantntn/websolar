@@ -1,5 +1,6 @@
 let powerChart = null;
 let currentRange = "live";
+let liveTimer = null;
 
 const chartData = {
   labels: [],
@@ -34,6 +35,50 @@ function createTestData() {
     chartData.grid.push(Math.round(Math.random() * 800));
     chartData.load.push(Math.round(1000 + Math.random() * 1800));
   }
+}
+
+function addLiveTestPoint() {
+  if (!powerChart || currentRange !== "live") return;
+
+  const now = new Date();
+
+  // Thêm mốc thời gian mới
+  powerChart.data.labels.push(
+    now.toLocaleTimeString("vi-VN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit"
+    })
+  );
+
+  // Tạm thời vẫn dùng dữ liệu giả
+  powerChart.data.datasets[0].data.push(
+    Math.round(1200 + Math.random() * 1800)
+  );
+
+  powerChart.data.datasets[1].data.push(
+    Math.round(-500 + Math.random() * 1000)
+  );
+
+  powerChart.data.datasets[2].data.push(
+    Math.round(Math.random() * 800)
+  );
+
+  powerChart.data.datasets[3].data.push(
+    Math.round(1000 + Math.random() * 1800)
+  );
+
+  // Live chỉ giữ 60 điểm = 30 phút
+  if (powerChart.data.labels.length > 60) {
+    powerChart.data.labels.shift();
+
+    powerChart.data.datasets.forEach(dataset => {
+      dataset.data.shift();
+    });
+  }
+
+  // Không animation lại toàn bộ chart
+  powerChart.update("none");
 }
 
 function createChart() {
@@ -95,6 +140,10 @@ function createChart() {
       responsive: true,
       maintainAspectRatio: false,
 
+      animation: {
+        duration: 350
+        },
+
       interaction: {
         mode: "index",
         intersect: false
@@ -121,8 +170,20 @@ function createChart() {
         x: {
           ticks: {
             color: "#aaa",
-            maxTicksLimit: 10
-          },
+            maxTicksLimit: window.innerWidth <= 600 ? 5 : 10,
+            maxRotation: 0,
+            autoSkip: true,
+
+            callback: function(value) {
+                const label = this.getLabelForValue(value);
+
+                if (window.innerWidth <= 600) {
+                return label.substring(0, 5);
+                }
+
+                return label;
+            }
+            },
 
           grid: {
             color: "rgba(255,255,255,0.05)"
@@ -200,9 +261,12 @@ function initChartRangeButtons() {
 
   });
 }
+
 window.addEventListener("load", () => {
   createTestData();
   createChart();
   initChartCheckboxes();
   initChartRangeButtons();
+
+  liveTimer = setInterval(addLiveTestPoint, 30000);
 });
