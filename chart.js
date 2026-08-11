@@ -56,7 +56,7 @@ function createChart() {
           data: chartData.pv,
           borderColor: "#ffd43b",
           backgroundColor: "#ffd43b",
-          tension: 0.35,
+          tension: 0.15,
           pointRadius: 0,
           borderWidth: 2
         },
@@ -66,7 +66,7 @@ function createChart() {
           data: chartData.bat,
           borderColor: "#00d078",
           backgroundColor: "#00d078",
-          tension: 0.35,
+          tension: 0.15,
           pointRadius: 0,
           borderWidth: 2
         },
@@ -76,7 +76,7 @@ function createChart() {
           data: chartData.grid,
           borderColor: "#ff5555",
           backgroundColor: "#ff5555",
-          tension: 0.35,
+          tension: 0.15,
           pointRadius: 0,
           borderWidth: 2
         },
@@ -86,7 +86,7 @@ function createChart() {
           data: chartData.load,
           borderColor: "#4da6ff",
           backgroundColor: "#4da6ff",
-          tension: 0.35,
+          tension: 0.15,
           pointRadius: 0,
           borderWidth: 2
         }
