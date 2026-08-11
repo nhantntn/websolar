@@ -218,6 +218,11 @@ function initChartRangeButtons() {
         return;
       }
 
+      if (currentRange === "12h") {
+        load12HourChart();
+        return;
+      }
+
       // Tạm thời 12h / 24h / Ngày vẫn dùng dữ liệu test
       loadTestRange(currentRange);
       updateChartData(chartData);
@@ -318,6 +323,185 @@ function historyKeyToSeconds(key) {
     Number(p[1]) * 60 +
     Number(p[2])
   );
+}
+
+function findNearestSample(history, targetSec, maxDiff = 120) {
+  if (!history) return null;
+
+  let nearest = null;
+  let nearestDiff = Infinity;
+
+  Object.entries(history).forEach(([key, sample]) => {
+    const sampleSec = historyKeyToSeconds(key);
+
+    if (sampleSec < 0) return;
+
+    const diff = Math.abs(sampleSec - targetSec);
+
+    if (diff < nearestDiff) {
+      nearestDiff = diff;
+      nearest = sample;
+    }
+  });
+
+  // Không lấy dữ liệu quá xa mốc
+  if (nearestDiff > maxDiff) {
+    return null;
+  }
+
+  return nearest;
+}
+
+function readHistoryDay(deviceId, dateKey) {
+  return new Promise((resolve, reject) => {
+    const {
+      db,
+      ref,
+      onValue
+    } = window.chartFirebase;
+
+    const historyRef = ref(
+      db,
+      `${deviceId}/history/${dateKey}`
+    );
+
+    let unsubscribe = null;
+
+    unsubscribe = onValue(
+      historyRef,
+
+      snapshot => {
+        const data = snapshot.val() || {};
+
+        if (unsubscribe) {
+          unsubscribe();
+        }
+
+        resolve(data);
+      },
+
+      error => {
+        if (unsubscribe) {
+          unsubscribe();
+        }
+
+        reject(error);
+      },
+
+      {
+        onlyOnce: true
+      }
+    );
+  });
+}
+
+async function load12HourChart() {
+  if (!window.chartFirebase) {
+    console.error("Firebase chưa sẵn sàng cho Chart");
+    return;
+  }
+
+  // Ngừng listener Live
+  if (historyUnsubscribe) {
+    historyUnsubscribe();
+    historyUnsubscribe = null;
+  }
+
+  const deviceId = window.getChartDeviceId();
+
+  const now = new Date();
+
+  // Ép mốc cuối về 00 hoặc 30 phút gần nhất
+  const endTime = new Date(now);
+
+  endTime.setSeconds(0, 0);
+
+  if (endTime.getMinutes() < 30) {
+    endTime.setMinutes(0);
+  } else {
+    endTime.setMinutes(30);
+  }
+
+  // 24 điểm × 30 phút
+  const targets = [];
+
+  for (let i = 23; i >= 0; i--) {
+    targets.push(
+      new Date(endTime.getTime() - i * 30 * 60 * 1000)
+    );
+  }
+
+  // 12h có thể đi qua ngày hôm qua
+  const requiredDays = [
+    ...new Set(
+      targets.map(t => getDateKey(t))
+    )
+  ];
+
+  console.log("📊 12h cần đọc:", requiredDays);
+
+  const historyByDay = {};
+
+  try {
+
+    for (const day of requiredDays) {
+      historyByDay[day] =
+        await readHistoryDay(deviceId, day);
+    }
+
+  } catch (error) {
+    console.error("❌ Lỗi đọc history 12h:", error);
+    return;
+  }
+
+  const data = {
+    labels: [],
+    pv: [],
+    bat: [],
+    grid: [],
+    load: []
+  };
+
+  targets.forEach(target => {
+
+    const dateKey = getDateKey(target);
+
+    const targetSec =
+      target.getHours() * 3600 +
+      target.getMinutes() * 60 +
+      target.getSeconds();
+
+    const history = historyByDay[dateKey];
+
+    const sample =
+      findNearestSample(history, targetSec);
+
+    data.labels.push(
+      target.toLocaleTimeString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit"
+      })
+    );
+
+    if (sample) {
+      data.pv.push(Number(sample.pv) || 0);
+      data.bat.push(Number(sample.bat) || 0);
+      data.grid.push(Number(sample.grid) || 0);
+      data.load.push(Number(sample.load) || 0);
+    } else {
+      data.pv.push(0);
+      data.bat.push(0);
+      data.grid.push(0);
+      data.load.push(0);
+    }
+  });
+
+  // Nếu trong lúc đang tải người dùng đã bấm tab khác
+  if (currentRange !== "12h") {
+    return;
+  }
+
+  updateChartData(data);
 }
 
 function buildLiveData(history) {
@@ -436,7 +620,7 @@ function startLiveChart() {
       const history = snapshot.val() || {};
 
       console.log("🔥 History Firebase:", snapshot.val());
-      
+
       const data = buildLiveData(history);
 
       updateChartData(data);
