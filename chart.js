@@ -120,7 +120,7 @@ function createChart() {
               return `${context.dataset.label}: ${context.parsed.y} W`;
             }
           }
-        }
+        },
 
         zoom: {
           pan: {
@@ -653,7 +653,7 @@ function startLiveChart() {
       powerChart.resetZoom();
     }
   }
-  
+
   const {
     db,
     ref,
