@@ -492,6 +492,23 @@
       }
     }
 
+    /* Màu chữ legend tương ứng với màu đường biểu đồ */
+    .chart-legend label:has(input[data-series="pv"]) {
+      color: #ffd43b;
+    }
+
+    .chart-legend label:has(input[data-series="bat"]) {
+      color: #00d078;
+    }
+
+    .chart-legend label:has(input[data-series="grid"]) {
+      color: #ff5555;
+    }
+
+    .chart-legend label:has(input[data-series="load"]) {
+      color: #4da6ff;
+    }
+
     /* ===== OTA Firmware ===== */
     .ota-card { margin:10px 0; padding:12px; border:1px dashed #444; border-radius:8px; background:rgba(0,0,0,0.12); }
     .ota-card h4 { margin:0 0 10px; color:#00d078; }
