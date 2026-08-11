@@ -415,6 +415,13 @@ function startLiveChart() {
   const deviceId = window.getChartDeviceId();
   const today = getDateKey();
 
+  console.log("📊 Chart device:", deviceId);
+  console.log("📅 Chart date:", today);
+  console.log(
+    "🔥 Firebase path:",
+    `${deviceId}/history/${today}`
+  );
+
   const historyRef = ref(
     db,
     `${deviceId}/history/${today}`
@@ -428,6 +435,8 @@ function startLiveChart() {
 
       const history = snapshot.val() || {};
 
+      console.log("🔥 History Firebase:", snapshot.val());
+      
       const data = buildLiveData(history);
 
       updateChartData(data);
