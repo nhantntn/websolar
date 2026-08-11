@@ -325,6 +325,19 @@ function updateChartData(data) {
   powerChart.update("none");
 }
 
+function resetChartView() {
+  if (!powerChart) return;
+
+  if (powerChart.resetZoom) {
+    powerChart.resetZoom("none");
+  }
+
+  delete powerChart.options.scales.x.min;
+  delete powerChart.options.scales.x.max;
+
+  powerChart.update("none");
+}
+
 function setChartWindow(pointCount) {
   if (!powerChart) return;
 
@@ -643,17 +656,6 @@ function startLiveChart() {
     historyUnsubscribe = null;
   }
 
-    // Xóa giới hạn cửa sổ của chế độ 12h/24h
-  // để Live trở lại hiển thị bình thường
-  if (powerChart) {
-    delete powerChart.options.scales.x.min;
-    delete powerChart.options.scales.x.max;
-
-    if (powerChart.resetZoom) {
-      powerChart.resetZoom();
-    }
-  }
-
   const {
     db,
     ref,
@@ -688,6 +690,10 @@ function startLiveChart() {
       const data = buildLiveData(history);
 
       updateChartData(data);
+
+      // Khi quay từ 12h về Live,
+      // xóa toàn bộ vị trí pan/viewport của 12h
+      resetChartView();
     },
 
     error => {
