@@ -121,6 +121,26 @@ function createChart() {
             }
           }
         }
+
+        zoom: {
+          pan: {
+            enabled: true,
+            mode: "x",
+            threshold: 5
+          },
+
+          zoom: {
+            wheel: {
+              enabled: false
+            },
+
+            pinch: {
+              enabled: false
+            },
+
+            mode: "x"
+          }
+        }
       },
 
       scales: {
@@ -305,6 +325,29 @@ function updateChartData(data) {
   powerChart.update("none");
 }
 
+function setChartWindow(pointCount) {
+  if (!powerChart) return;
+
+  const total =
+    powerChart.data.labels.length;
+
+  if (total === 0) return;
+
+  const max =
+    total - 1;
+
+  const min =
+    Math.max(
+      0,
+      max - pointCount + 1
+    );
+
+  powerChart.options.scales.x.min = min;
+  powerChart.options.scales.x.max = max;
+
+  powerChart.update("none");
+}
+
 function getDateKey(date = new Date()) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -401,7 +444,6 @@ async function load12HourChart() {
     return;
   }
 
-  // Ngừng listener Live
   if (historyUnsubscribe) {
     historyUnsubscribe();
     historyUnsubscribe = null;
@@ -410,49 +452,74 @@ async function load12HourChart() {
   const deviceId = window.getChartDeviceId();
 
   const now = new Date();
+  const startTime = new Date(
+    now.getTime() - 12 * 60 * 60 * 1000
+  );
 
-  // Ép mốc cuối về 00 hoặc 30 phút gần nhất
-  const endTime = new Date(now);
-
-  endTime.setSeconds(0, 0);
-
-  if (endTime.getMinutes() < 30) {
-    endTime.setMinutes(0);
-  } else {
-    endTime.setMinutes(30);
-  }
-
-  // 24 điểm × 30 phút
-  const targets = [];
-
-  for (let i = 23; i >= 0; i--) {
-    targets.push(
-      new Date(endTime.getTime() - i * 30 * 60 * 1000)
-    );
-  }
-
-  // 12h có thể đi qua ngày hôm qua
   const requiredDays = [
-    ...new Set(
-      targets.map(t => getDateKey(t))
-    )
+    ...new Set([
+      getDateKey(startTime),
+      getDateKey(now)
+    ])
   ];
-
-  console.log("📊 12h cần đọc:", requiredDays);
 
   const historyByDay = {};
 
   try {
-
     for (const day of requiredDays) {
       historyByDay[day] =
         await readHistoryDay(deviceId, day);
     }
-
-  } catch (error) {
+  }
+  catch (error) {
     console.error("❌ Lỗi đọc history 12h:", error);
     return;
   }
+
+  const points = [];
+
+  for (const day of requiredDays) {
+
+    const history = historyByDay[day];
+
+    Object.entries(history).forEach(([timeKey, sample]) => {
+
+      const parts = timeKey.split("-");
+
+      if (parts.length !== 3) return;
+
+      const [h, m, s] = parts.map(Number);
+
+      const partsDate = day.split("-").map(Number);
+
+      const timestamp = new Date(
+        partsDate[0],
+        partsDate[1] - 1,
+        partsDate[2],
+        h,
+        m,
+        s
+      );
+
+      if (
+        timestamp >= startTime &&
+        timestamp <= now
+      ) {
+        points.push({
+          timestamp,
+          pv: Number(sample.pv) || 0,
+          bat: Number(sample.bat) || 0,
+          grid: Number(sample.grid) || 0,
+          load: Number(sample.load) || 0
+        });
+      }
+    });
+  }
+
+  // Bắt buộc sắp xếp đúng thời gian
+  points.sort(
+    (a, b) => a.timestamp - b.timestamp
+  );
 
   const data = {
     labels: [],
@@ -462,46 +529,32 @@ async function load12HourChart() {
     load: []
   };
 
-  targets.forEach(target => {
-
-    const dateKey = getDateKey(target);
-
-    const targetSec =
-      target.getHours() * 3600 +
-      target.getMinutes() * 60 +
-      target.getSeconds();
-
-    const history = historyByDay[dateKey];
-
-    const sample =
-      findNearestSample(history, targetSec);
+  points.forEach(point => {
 
     data.labels.push(
-      target.toLocaleTimeString("vi-VN", {
-        hour: "2-digit",
-        minute: "2-digit"
-      })
+      point.timestamp.toLocaleTimeString(
+        "vi-VN",
+        {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit"
+        }
+      )
     );
 
-    if (sample) {
-      data.pv.push(Number(sample.pv) || 0);
-      data.bat.push(Number(sample.bat) || 0);
-      data.grid.push(Number(sample.grid) || 0);
-      data.load.push(Number(sample.load) || 0);
-    } else {
-      data.pv.push(0);
-      data.bat.push(0);
-      data.grid.push(0);
-      data.load.push(0);
-    }
+    data.pv.push(point.pv);
+    data.bat.push(point.bat);
+    data.grid.push(point.grid);
+    data.load.push(point.load);
   });
 
-  // Nếu trong lúc đang tải người dùng đã bấm tab khác
   if (currentRange !== "12h") {
     return;
   }
 
   updateChartData(data);
+
+  setChartWindow(120);
 }
 
 function buildLiveData(history) {
@@ -590,6 +643,17 @@ function startLiveChart() {
     historyUnsubscribe = null;
   }
 
+    // Xóa giới hạn cửa sổ của chế độ 12h/24h
+  // để Live trở lại hiển thị bình thường
+  if (powerChart) {
+    delete powerChart.options.scales.x.min;
+    delete powerChart.options.scales.x.max;
+
+    if (powerChart.resetZoom) {
+      powerChart.resetZoom();
+    }
+  }
+  
   const {
     db,
     ref,
