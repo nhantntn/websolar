@@ -250,13 +250,14 @@ function initChartRangeButtons() {
 
       currentRange = button.dataset.range;
 
-      if (currentRange === "day") {
+        if (currentRange === "day") {
         daySelect.classList.remove("hidden");
-      } else {
+        } else {
         daySelect.classList.add("hidden");
-      }
+        }
 
-      console.log("Chart range:", currentRange);
+        loadTestRange(currentRange);
+        updateChartData();
     });
 
   });
@@ -270,3 +271,77 @@ window.addEventListener("load", () => {
 
   liveTimer = setInterval(addLiveTestPoint, 30000);
 });
+
+function loadTestRange(range) {
+  chartData.labels = [];
+  chartData.pv = [];
+  chartData.bat = [];
+  chartData.grid = [];
+  chartData.load = [];
+
+  const now = new Date();
+
+  let points = 60;
+  let stepMs = 30000;
+
+  if (range === "12h") {
+    points = 24;
+    stepMs = 30 * 60 * 1000;
+  }
+
+  if (range === "day") {
+    points = 24;
+    stepMs = 60 * 60 * 1000;
+  }
+
+  if (range === "24h") {
+    const today = new Date();
+
+    today.setHours(0, 0, 0, 0);
+
+    for (let h = 0; h < 24; h++) {
+        const t = new Date(today.getTime() + h * 60 * 60 * 1000);
+
+        chartData.labels.push(
+        t.toLocaleTimeString("vi-VN", {
+            hour: "2-digit",
+            minute: "2-digit"
+        })
+        );
+
+        chartData.pv.push(Math.round(1200 + Math.random() * 1800));
+        chartData.bat.push(Math.round(-500 + Math.random() * 1000));
+        chartData.grid.push(Math.round(Math.random() * 800));
+        chartData.load.push(Math.round(1000 + Math.random() * 1800));
+    }
+
+    return;
+    }
+  for (let i = points - 1; i >= 0; i--) {
+    const t = new Date(now.getTime() - i * stepMs);
+
+    chartData.labels.push(
+      t.toLocaleTimeString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit"
+      })
+    );
+
+    chartData.pv.push(Math.round(1200 + Math.random() * 1800));
+    chartData.bat.push(Math.round(-500 + Math.random() * 1000));
+    chartData.grid.push(Math.round(Math.random() * 800));
+    chartData.load.push(Math.round(1000 + Math.random() * 1800));
+  }
+}
+
+function updateChartData() {
+  if (!powerChart) return;
+
+  powerChart.data.labels = chartData.labels;
+  powerChart.data.datasets[0].data = chartData.pv;
+  powerChart.data.datasets[1].data = chartData.bat;
+  powerChart.data.datasets[2].data = chartData.grid;
+  powerChart.data.datasets[3].data = chartData.load;
+
+  powerChart.update();
+}
