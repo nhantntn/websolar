@@ -1073,7 +1073,6 @@
   
   function showSettingTab(tabName, element) {
     // Ẩn tất cả layout
-    hideChart();
 
     const sections = document.querySelectorAll(".setting-section");
     sections.forEach(section => section.classList.remove("active"));
@@ -1278,6 +1277,7 @@
   }
 
   document.getElementById("settings_icon").addEventListener("click", () => {
+    hideChart();
     document.getElementById("layout").style.display = "none";
     document.getElementById("layout2").style.display = "none";
     document.getElementById("settings_layout").classList.remove("hidden");
