@@ -1073,7 +1073,8 @@
   
   function showSettingTab(tabName, element) {
     // Ẩn tất cả layout
-    
+    hideChart();
+
     const sections = document.querySelectorAll(".setting-section");
     sections.forEach(section => section.classList.remove("active"));
 
@@ -1284,6 +1285,7 @@
   });
 
   function showMainLayout() {
+    showChart();
     document.getElementById("settings_layout").classList.add("hidden");
     document.getElementById("layout").style.display = "block";
     document.getElementById("layout2").style.display = "block";
@@ -2137,6 +2139,15 @@
       console.error("Lỗi gửi lệnh xóa kWh:", error);
       alert("Không gửi được lệnh xóa kWh!");
     }
+  }
+  function hideChart() {
+    const chart = document.querySelector(".chart-card");
+    if (chart) chart.style.display = "none";
+  }
+
+  function showChart() {
+    const chart = document.querySelector(".chart-card");
+    if (chart) chart.style.display = "";
   }
   window.changeDevice = changeDevice;
   window.showSettingTab = showSettingTab;
